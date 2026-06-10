@@ -19,11 +19,14 @@ Imports:
     numbers,
     prodlim,
     quanteda,
+    Rcpp,
     rlang,
     stringi,
     tidyr,
     visNetwork,
     zeallot
+LinkingTo:
+    Rcpp
 Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
