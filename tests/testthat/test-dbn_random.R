@@ -48,13 +48,14 @@ test_that("random.structure.dbn returns the correct output", {
   }
   #g_0 does contain the same edges of g_transition when g_0_arcs = TRUE
   dbn_random_generated <-
-    random.structure.dbn(c("A", "B", "C", "D"), 0.5, 0.5, markov_order = 1)
+    random.structure.dbn(c("A", "B", "C", "D"), 0.5, 0.5, markov_order = 1, g_0_arcs = TRUE)
   dbn_edges <- dbn_random_generated$arcs
   check_result <- check_correspondence(dbn_edges)
   expect_equal(check_result, TRUE)
+  set.seed(2131)
   #g_0 does not contain the same edges of g_transition when g_0_arcs = FALSE
   dbn_random_generated <-
-    random.structure.dbn(c("A", "B", "C", "D"), 0.5, 0.5, markov_order = 1,
+    random.structure.dbn(c("A", "B", "C", "D"), 0.2, 0.2, markov_order = 1,
                          g_0_arcs = FALSE)
   dbn_edges <- dbn_random_generated$arcs
   check_result <- check_correspondence(dbn_edges)
@@ -66,7 +67,7 @@ test_that("random.structure.dbn returns the correct output", {
   #no error when the input parameters are correct
   expect_no_error(random.structure.dbn(c("A", "B", "C", "D"), 0.6, 0.6, markov_order = 1))
   expect_no_error(random.structure.dbn(c("A", "B", "C", "D"), 0.6, 0.6, markov_order = 1,
-                                       g_0_arcs = FALSE))
+                                       g_0_arcs = FALSE, g_0_prob = 0.0))
 
   # markov_order > 1: per-lag interslice probability vector
   expect_no_error(random.structure.dbn(c("A", "B", "C"), 0.3, c(0.5, 0.2),

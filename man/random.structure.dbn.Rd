@@ -34,7 +34,7 @@ an independent random \eqn{G_0} is generated using \code{g_0_prob}.}
 \item{g_0_prob}{a single number in \code{[0, 1]} used only when
 \code{g_0_arcs = FALSE}: edge probability for the random \eqn{G_0} graph
 sampled via \code{bnlearn::random.graph}. Defaults to
-\code{prob_edge_intraslice}.}
+\code{prob_edge_intraslice}. If g_0_prob is set to 0 the g_0 network is empty.}
 }
 \value{
 an object of class 'dbn'.
@@ -77,4 +77,7 @@ random.structure.dbn(c("A", "B", "C"), 0.3, c(0.5, 0.2), markov_order = 2)
 # independent prior network with its own edge density
 random.structure.dbn(c("A", "B", "C"), 0.5, 0.4, markov_order = 1,
                       g_0_arcs = FALSE, g_0_prob = 0.2)
+# empty g_0 network
+random.structure.dbn(c("A", "B", "C"), 0.5, 0.4, markov_order = 1,
+                      g_0_arcs = FALSE, g_0_prob = 0.0)
 }

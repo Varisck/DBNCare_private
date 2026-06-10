@@ -1,4 +1,4 @@
-# dbn.sampling.cpp() must replicate dbn.sampling() draw for draw: the Rcpp
+# dbn.sampling() must replicate dbn.sampling.R() draw for draw: the Rcpp
 # cores consume the R RNG stream in the same order as the pure-R
 # implementation, so with the same seed the two functions must return the
 # same dataset.
@@ -57,7 +57,7 @@ structure_mo2 <- function() {
   dbn
 }
 
-test_that("dbn.sampling.cpp matches dbn.sampling on a gaussian network", {
+test_that("dbn.sampling matches dbn.sampling on a gaussian network", {
   truth <- structure_mo1()
   fit <- dbn.fit(DBN = truth, CPDs = list(
     A_0 = cpd_for(truth, "A_0", 0.0, c(), 1.0),
@@ -69,13 +69,13 @@ test_that("dbn.sampling.cpp matches dbn.sampling on a gaussian network", {
   ))
 
   set.seed(81)
-  reference <- dbn.sampling(fit, 60, 5)
+  reference <- dbn.sampling.R(fit, 60, 5)
   set.seed(81)
-  sampled <- dbn.sampling.cpp(fit, 60, 5)
+  sampled <- dbn.sampling(fit, 60, 5)
   expect_equal(sampled, reference, tolerance = 1e-12)
 })
 
-test_that("dbn.sampling.cpp matches dbn.sampling on a discrete network", {
+test_that("dbn.sampling matches dbn.sampling on a discrete network", {
   truth <- structure_mo1()
   fit <- dbn.fit(DBN = truth, CPTs = list(
     A_0 = cpt_for(truth, "A_0", 0.45),
@@ -87,13 +87,13 @@ test_that("dbn.sampling.cpp matches dbn.sampling on a discrete network", {
   ))
 
   set.seed(82)
-  reference <- dbn.sampling(fit, 80, 5)
+  reference <- dbn.sampling.R(fit, 80, 5)
   set.seed(82)
-  sampled <- dbn.sampling.cpp(fit, 80, 5)
+  sampled <- dbn.sampling(fit, 80, 5)
   expect_identical(sampled, reference)
 })
 
-test_that("dbn.sampling.cpp matches dbn.sampling with markov order 2 (gaussian)", {
+test_that("dbn.sampling matches dbn.sampling with markov order 2 (gaussian)", {
   truth <- structure_mo2()
   fit <- dbn.fit(DBN = truth, CPDs = list(
     A_0 = cpd_for(truth, "A_0", 0.0, c(), 1.0),
@@ -103,13 +103,13 @@ test_that("dbn.sampling.cpp matches dbn.sampling with markov order 2 (gaussian)"
   ))
 
   set.seed(83)
-  reference <- dbn.sampling(fit, 50, 6)
+  reference <- dbn.sampling.R(fit, 50, 6)
   set.seed(83)
-  sampled <- dbn.sampling.cpp(fit, 50, 6)
+  sampled <- dbn.sampling(fit, 50, 6)
   expect_equal(sampled, reference, tolerance = 1e-12)
 })
 
-test_that("dbn.sampling.cpp matches dbn.sampling with markov order 2 (discrete)", {
+test_that("dbn.sampling matches dbn.sampling with markov order 2 (discrete)", {
   truth <- structure_mo2()
   fit <- dbn.fit(DBN = truth, CPTs = list(
     A_0 = cpt_for(truth, "A_0", 0.40),
@@ -119,13 +119,13 @@ test_that("dbn.sampling.cpp matches dbn.sampling with markov order 2 (discrete)"
   ))
 
   set.seed(84)
-  reference <- dbn.sampling(fit, 50, 6)
+  reference <- dbn.sampling.R(fit, 50, 6)
   set.seed(84)
-  sampled <- dbn.sampling.cpp(fit, 50, 6)
+  sampled <- dbn.sampling(fit, 50, 6)
   expect_identical(sampled, reference)
 })
 
-test_that("dbn.sampling.cpp handles CPTs whose levels are ordered differently", {
+test_that("dbn.sampling handles CPTs whose levels are ordered differently", {
   # the levels of A are listed as no/yes in the G_0 CPTs but as yes/no in the
   # transition CPTs; values must still be matched by label, like filter_cpt()
   dbn <- empty.dbn(dynamic_nodes = c("A", "B"), markov_order = 1)
@@ -153,13 +153,13 @@ test_that("dbn.sampling.cpp handles CPTs whose levels are ordered differently", 
   ))
 
   set.seed(85)
-  reference <- dbn.sampling(fit, 60, 4)
+  reference <- dbn.sampling.R(fit, 60, 4)
   set.seed(85)
-  sampled <- dbn.sampling.cpp(fit, 60, 4)
+  sampled <- dbn.sampling(fit, 60, 4)
   expect_identical(sampled, reference)
 })
 
-test_that("dbn.sampling.cpp validates its inputs like dbn.sampling", {
+test_that("dbn.sampling validates its inputs like dbn.sampling", {
   truth <- structure_mo1()
   fit <- dbn.fit(DBN = truth, CPTs = list(
     A_0 = cpt_for(truth, "A_0", 0.45),
@@ -170,9 +170,9 @@ test_that("dbn.sampling.cpp validates its inputs like dbn.sampling", {
     C_t = cpt_for(truth, "C_t", 0.05, c(`C_t-1` = 0.30, A_t = 0.30, B_t = 0.30))
   ))
 
-  expect_error(dbn.sampling.cpp(fit, "5", 4), "N_samples must be an integer!")
-  expect_error(dbn.sampling.cpp(fit, 5, "4"), "Time must be an integer!")
-  expect_error(dbn.sampling.cpp(fit, 0, 4), "N_samples must be greater than 0!")
-  expect_error(dbn.sampling.cpp(fit, 5, 0), "Time must be greater than 0!")
-  expect_error(dbn.sampling.cpp(c("dbn"), 5, 4), "fitted_DBN must be a dbn.fit object")
+  expect_error(dbn.sampling(fit, "5", 4), "N_samples must be an integer!")
+  expect_error(dbn.sampling(fit, 5, "4"), "Time must be an integer!")
+  expect_error(dbn.sampling(fit, 0, 4), "N_samples must be greater than 0!")
+  expect_error(dbn.sampling(fit, 5, 0), "Time must be greater than 0!")
+  expect_error(dbn.sampling(c("dbn"), 5, 4), "fitted_DBN must be a dbn.fit object")
 })

@@ -28,7 +28,7 @@ rename_nodes_unroll <- function(time_slice, nodes_names) {
     end_with_t <- grepl("_t$", name_n)
     if (end_t_1) {
       previous_time_slice <- time_slice - 1
-      root_node_name <- get_generic_node_name_rex(name_n)
+      root_node_name <- get_variable_name(name_n)
       new_node_name <-
         paste(root_node_name,
               "_",
@@ -36,7 +36,7 @@ rename_nodes_unroll <- function(time_slice, nodes_names) {
               sep = "")
     }
     if (end_with_t) {
-      root_node_name <- get_generic_node_name_rex(name_n)
+      root_node_name <- get_variable_name(name_n)
       new_node_name <-
         paste(root_node_name, "_", as.character(time_slice), sep = "")
     }
@@ -67,7 +67,7 @@ get_node_edges <- function(dbn_transition, node, time_slice) {
     stop("time slice must be an integer!")
   }
   node_edges <- c()
-  root_node_name_n_t <- get_generic_node_name_rex(node)
+  root_node_name_n_t <- get_variable_name(node)
   new_node_name_n_t <-
     paste(root_node_name_n_t, "_", as.character(time_slice), sep = "")
   node_parents <- get_parent_set(dbn_transition, node)
@@ -108,10 +108,9 @@ get_unrolled_dbn <- function(dbn_fitted, slices) {
   nodes_bn <- c()
   edges_bn <- c()
   cpt_bn <- list()
-  my_dbn_transition <-
-    from_fitted_DBN_to_fitted_G_transition(dbn_fitted)
+  my_dbn_transition <- get.transition.net(dbn_fitted)
   nodes_in_transition <- get_nodes_t(my_dbn_transition)
-  my_dbn_g_0 <- from_fitted_DBN_to_fitted_G_0(dbn_fitted)
+  my_dbn_g_0 <- get.g0.net(dbn_fitted)
   nodes_in_0 <- bnlearn::node.ordering(my_dbn_g_0)
   #iterate on nodes and get,for each one, edges and probability tables
   for (n_0 in nodes_in_0) {
@@ -134,7 +133,7 @@ get_unrolled_dbn <- function(dbn_fitted, slices) {
       #rename each single node if node has t rename t with time_slice
       #if name has t-1 subtract 1 to time_slice.
       renamed_nodes <- rename_nodes_unroll(time_slice, names_cpt_n_t)
-      root_node_name_n_t <- get_generic_node_name_rex(n_t)
+      root_node_name_n_t <- get_variable_name(n_t)
       new_node_name_n_t <-
         paste(root_node_name_n_t, "_", as.character(time_slice), sep = "")
       names(dimnames(cpt_n_t)) <- renamed_nodes

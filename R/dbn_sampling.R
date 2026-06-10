@@ -186,7 +186,7 @@ remove_prev_time_from_bn_fit = function(bn) {
 #' @export
 #' @examples
 #' dbn.sampling(DBN_example, N_samples, Time)
-dbn.sampling <- function(fitted_dbn, n_samples, max_time) {
+dbn.sampling.R <- function(fitted_dbn, n_samples, max_time) {
  if (is.character(max_time)) {
     stop("Time must be an integer!")
   }

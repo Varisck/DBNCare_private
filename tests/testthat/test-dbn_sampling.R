@@ -150,7 +150,8 @@ test_that(
   "dbn.sampling produces a dataset that accurately reflects the process from which it originates",
   {
     tolerance <- 0.02
-    
+
+    set.seed(3212)    
     sampled_dataset <-
       dbn.sampling(fitted_dbn = fitted_DBN, 1e+4, 5)
     

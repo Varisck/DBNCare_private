@@ -112,23 +112,21 @@ plan_discrete_node <- function(net, variable, var_index, levels_list) {
 }
 
 
-#' Generate a sampling dataset (Rcpp implementation)
+#' Generate a sampling dataset
 #'
-#' Drop-in replacement for [dbn.sampling()] with the sampling loops
-#' implemented in C++ via \pkg{Rcpp}. The C++ cores draw from the R random
-#' number generator in the same order as the pure-R implementation, so for a
-#' fixed seed both functions return the same dataset.
 #'
 #' @param fitted_dbn an object of class 'dbn.fit'
 #' @param n_samples number of samples
 #' @param max_time time series length
+#' 
 #' @returns the generated dataframe
 #' @useDynLib DynamicBayesianNetwork, .registration = TRUE
 #' @importFrom Rcpp sourceCpp
 #' @export
+#' 
 #' @examples
-#' dbn.sampling.cpp(DBN_example, N_samples, Time)
-dbn.sampling.cpp <- function(fitted_dbn, n_samples, max_time) {
+#' dbn.sampling(DBN_example, N_samples, Time)
+dbn.sampling <- function(fitted_dbn, n_samples, max_time) {
   if (is.character(max_time)) {
     stop("Time must be an integer!")
   }

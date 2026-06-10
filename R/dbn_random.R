@@ -386,7 +386,7 @@ fit_random_dbn_g = function(dbn, param.lower = .2, param.upper = .8,
 #' @param g_0_prob a single number in \code{[0, 1]} used only when
 #'   \code{g_0_arcs = FALSE}: edge probability for the random \eqn{G_0} graph
 #'   sampled via \code{bnlearn::random.graph}. Defaults to
-#'   \code{prob_edge_intraslice}.
+#'   \code{prob_edge_intraslice}. If g_0_prob is set to 0 the g_0 network is empty.
 #'
 #' @return an object of class 'dbn'.
 #' @export
@@ -397,6 +397,10 @@ fit_random_dbn_g = function(dbn, param.lower = .2, param.upper = .8,
 #' # independent prior network with its own edge density
 #' random.structure.dbn(c("A", "B", "C"), 0.5, 0.4, markov_order = 1,
 #'                       g_0_arcs = FALSE, g_0_prob = 0.2)
+#' # empty g_0 network
+#' random.structure.dbn(c("A", "B", "C"), 0.5, 0.4, markov_order = 1,
+#'                       g_0_arcs = FALSE, g_0_prob = 0.0)
+
 random.structure.dbn <- function(node_names,
                                  prob_edge_intraslice,
                                  prob_edge_interslice,
