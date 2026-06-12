@@ -2,17 +2,17 @@
 
 #' Function to create a Dynamic Bayesian Network
 #'
-#' @param static_nodes character vector listing the time-independent nodes
 #' @param dynamic_nodes character vector listing the time-dependent nodes
 #' @param markov_order integer value (> 1): markovian order of the process
+#' @param static_nodes character vector listing the time-independent nodes
 #'
 #' @return object of class 'dbn'
 #' @export
 #'
 #' @examples
-#' DBN_example <- empty.dbn(static_nodes = c("K"), dynamic_nodes = c("A", "S", "E", "O", "R", "T", "B"), markov_order = 1)
+#' DBN_example <- empty.dbn(dynamic_nodes = c("A", "S", "E", "O", "R", "T", "B"), markov_order = 1)
 #' class(DBN_example) # 'dbn'
-empty.dbn <- function(static_nodes = c(), dynamic_nodes, markov_order) {
+empty.dbn <- function(dynamic_nodes, markov_order, static_nodes = c()) {
   if (is.null(static_nodes)) {
     if (length(intersect(static_nodes, dynamic_nodes)) != 0) {
       stop('A node could not be both Static and Dynamic!!!')

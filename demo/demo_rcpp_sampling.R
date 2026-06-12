@@ -1,8 +1,8 @@
 # ============================================================================
-# Verification of dbn.sampling.cpp (Rcpp port of dbn.sampling)
+# Verification of dbn.sampling (Rcpp port of dbn.sampling)
 #
 # For a hand-designed gaussian DBN and a hand-designed discrete DBN:
-#   1. dbn.sampling.cpp() must return the same dataset as dbn.sampling()
+#   1. dbn.sampling() must return the same dataset as dbn.sampling()
 #      when run with the same seed (the C++ cores consume the R RNG stream
 #      draw for draw);
 #   2. hc.dbn() run on the sampled dataset must reconstruct the designed
@@ -83,7 +83,7 @@ horizon <- 8
 set.seed(20260610)
 reference <- dbn.sampling(fit_gaussian, n_samples, horizon)
 set.seed(20260610)
-sampled <- dbn.sampling.cpp(fit_gaussian, n_samples, horizon)
+sampled <- dbn.sampling(fit_gaussian, n_samples, horizon)
 
 if (!identical(reference, sampled)) {
   cat("identical() is FALSE, all.equal():\n")
@@ -140,7 +140,7 @@ n_samples_d <- 2000
 set.seed(992)
 reference_d <- dbn.sampling(fit_discrete, n_samples_d, horizon)
 set.seed(992)
-sampled_d <- dbn.sampling.cpp(fit_discrete, n_samples_d, horizon)
+sampled_d <- dbn.sampling(fit_discrete, n_samples_d, horizon)
 check("discrete: same dataset as dbn.sampling under the same seed",
       identical(reference_d, sampled_d))
 
@@ -157,13 +157,13 @@ check("discrete: hc.dbn reconstructs G_t", same_structure(truth_ms$g_t, learned_
 section("timing (n_samples = 400, max_time = 10)")
 
 elapsed_r <- system.time(dbn.sampling(fit_gaussian, 400, 10))["elapsed"]
-elapsed_cpp <- system.time(dbn.sampling.cpp(fit_gaussian, 400, 10))["elapsed"]
-cat(sprintf("gaussian  | dbn.sampling: %7.3fs | dbn.sampling.cpp: %7.3fs | speed-up: x%.0f\n",
+elapsed_cpp <- system.time(dbn.sampling(fit_gaussian, 400, 10))["elapsed"]
+cat(sprintf("gaussian  | dbn.sampling: %7.3fs | dbn.sampling: %7.3fs | speed-up: x%.0f\n",
             elapsed_r, elapsed_cpp, elapsed_r / max(elapsed_cpp, 1e-3)))
 
 elapsed_r <- system.time(dbn.sampling(fit_discrete, 400, 10))["elapsed"]
-elapsed_cpp <- system.time(dbn.sampling.cpp(fit_discrete, 400, 10))["elapsed"]
-cat(sprintf("discrete  | dbn.sampling: %7.3fs | dbn.sampling.cpp: %7.3fs | speed-up: x%.0f\n",
+elapsed_cpp <- system.time(dbn.sampling(fit_discrete, 400, 10))["elapsed"]
+cat(sprintf("discrete  | dbn.sampling: %7.3fs | dbn.sampling: %7.3fs | speed-up: x%.0f\n",
             elapsed_r, elapsed_cpp, elapsed_r / max(elapsed_cpp, 1e-3)))
 
 cat("\nall checks passed\n")
@@ -189,7 +189,7 @@ if (!requireNamespace("bench", quietly = TRUE)) {
   cat("-- gaussian --\n")
   bench_gaussian <- bench::mark(
     dbn.sampling     = dbn.sampling(fit_gaussian, bench_n_samples, bench_max_time),
-    dbn.sampling.cpp = dbn.sampling.cpp(fit_gaussian, bench_n_samples, bench_max_time),
+    dbn.sampling.R   = dbn.sampling.R(fit_gaussian, bench_n_samples, bench_max_time),
     check = FALSE,
     min_iterations = 10
   )
@@ -198,7 +198,7 @@ if (!requireNamespace("bench", quietly = TRUE)) {
   cat("\n-- discrete --\n")
   bench_discrete <- bench::mark(
     dbn.sampling     = dbn.sampling(fit_discrete, bench_n_samples, bench_max_time),
-    dbn.sampling.cpp = dbn.sampling.cpp(fit_discrete, bench_n_samples, bench_max_time),
+    dbn.sampling.R   = dbn.sampling.R(fit_discrete, bench_n_samples, bench_max_time),
     check = FALSE,
     min_iterations = 10
   )
@@ -206,7 +206,7 @@ if (!requireNamespace("bench", quietly = TRUE)) {
 
   # speed-up: how many times faster the C++ version is, on the min and the
   # median timings (bench stores them as <bench_time> objects in seconds; row 1
-  # is dbn.sampling, row 2 is dbn.sampling.cpp)
+  # is dbn.sampling, row 2 is dbn.sampling)
   report_speedup <- function(label, res) {
     min_r    <- as.numeric(res$min[1])
     min_cpp  <- as.numeric(res$min[2])
@@ -216,7 +216,7 @@ if (!requireNamespace("bench", quietly = TRUE)) {
                 label, min_r / min_cpp, med_r / med_cpp))
   }
 
-  cat("\n-- speed-up (dbn.sampling / dbn.sampling.cpp) --\n")
+  cat("\n-- speed-up (dbn.sampling / dbn.sampling) --\n")
   report_speedup("gaussian", bench_gaussian)
   report_speedup("discrete", bench_discrete)
 }

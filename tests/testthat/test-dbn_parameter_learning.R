@@ -1,3 +1,35 @@
+test_that("inconsistent parent levels in CPT raises an error", {
+  dbn <- empty.dbn(dynamic_nodes = c("A", "B"), markov_order = 1)
+  dbn <- add.arc.dbn(dbn, from = c("A", "t"),   to = c("B", "t"))
+  dbn <- add.arc.dbn(dbn, from = c("A", "t_0"), to = c("B", "t_0"))
+  dbn <- add.arc.dbn(dbn, from = c("A", "t-1"), to = c("A", "t"))
+
+  A_lv_correct <- c("yes", "no")
+  A_lv_wrong   <- c("HIGH", "LOW")   # different labels for the same variable
+  B_lv         <- c("high", "low")
+
+  # A_0 processed first (parent): registers defined_levels[["A"]] = c("yes","no")
+  A_0.prob <- array(c(0.3, 0.7), dim = 2,
+                    dimnames = list(A_0 = A_lv_correct))
+
+  # B_0 processed second (child of A_0): A_0 dimension uses wrong levels -> error
+  B_0.prob <- array(c(0.4, 0.6, 0.7, 0.3), dim = c(2, 2),
+                    dimnames = list(B_0 = B_lv, A_0 = A_lv_wrong))
+
+  A_t.prob <- array(c(0.8, 0.2, 0.1, 0.9), dim = c(2, 2),
+                    dimnames = list(A_t = A_lv_correct, `A_t-1` = A_lv_correct))
+
+  B_t.prob <- array(c(0.6, 0.4, 0.2, 0.8), dim = c(2, 2),
+                    dimnames = list(B_t = B_lv, A_t = A_lv_correct))
+
+  CPTs_bad <- list(A_0 = A_0.prob, B_0 = B_0.prob, A_t = A_t.prob, B_t = B_t.prob)
+
+  expect_error(
+    dbn.fit(DBN = dbn, CPTs = CPTs_bad),
+    regexp = "Inconsistency in node's levels for variable B_0"
+  )
+})
+
 test_that("CPTs are generated correctly", {
   d_nodes <- c("A", "B")
   dbn <- empty.dbn(dynamic_nodes = d_nodes, markov_order = 1)

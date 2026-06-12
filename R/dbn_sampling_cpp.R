@@ -148,8 +148,8 @@ dbn.sampling <- function(fitted_dbn, n_samples, max_time) {
     stop("Invalid dbn_type")
   }
 
-  bn_0 <- from_fitted_DBN_to_fitted_G_0(fitted_dbn)
-  bn_transition <- from_fitted_DBN_to_fitted_G_transition(fitted_dbn)
+  bn_0 <- get.g0.net(fitted_dbn)
+  bn_transition <- get.transition.net(fitted_dbn)
   # sampling order: node ordering of G_0 at t = 0, then node ordering of the
   # transition network restricted to the _t nodes for t = 1..max_time
   nodes_0 <- bnlearn::node.ordering(bn_0)

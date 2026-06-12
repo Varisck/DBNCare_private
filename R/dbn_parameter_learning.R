@@ -1,11 +1,11 @@
 # DEFINE FUNCTION FOR dbn.fit OBJECT CREATION -> NODES (with childrens, parents and CPTs)
 
 get_static_nodes = function(dbn) {
-  bnlearn::node.ordering(from_DBN_to_G_0(dbn))
+  bnlearn::node.ordering(get.g0.net(dbn))
 }
 
 get_dynamic_nodes = function(dbn) {
-  g_transition_graph = from_DBN_to_G_transition(dbn)
+  g_transition_graph = get.transition.net(dbn)
   quanteda::char_select(bnlearn::node.ordering(g_transition_graph),
                         "*t",
                         valuetype = "glob")
@@ -105,140 +105,100 @@ dbn.fit <- function(DBN, CPTs = list(), CPDs = list(),
 
 # ---- discrete subroutines -------------------------------------------------
 
+compute_cpt = function(data, variable, parents, lvs, replace.unidentifiable) {
+  pr <-
+    data[, c(rev(parents), variable)] %>% 
+    dplyr::group_by_all() %>% 
+    dplyr::count() %>% 
+    dplyr::ungroup() %>% 
+    tidyr::complete(!!! rlang::syms(c(rev(parents), variable))) %>% 
+    replace(is.na(.), 0) %>% 
+    dplyr::group_by(dplyr::across(rev(parents))) %>% 
+    dplyr::reframe(!!dplyr::sym(variable), prob = n / sum(n)) %>% 
+    dplyr::ungroup() %>% 
+    dplyr::arrange_all(.vars = c(rev(parents), variable))
+    if (any(is.na(pr$prob))) {
+      if (replace.unidentifiable) {
+        pr$prob <- replace(pr$prob, is.na(pr$prob), 1 / length(lvs[[variable]]))
+      } else {
+        warning("WARNING: Probabilities of the conditioning set equal to 0: Relative frequency is NA")
+      }
+    }
+  pr
+}
+
+fit_nodes_discrete <- function(nodes, data, dbn, lvs, replace.unidentifiable) {
+  fitted <- list()
+  for (variable in nodes) {
+    parents  <- get_parent_set(dbn, variable)
+    children <- get_children_set(dbn, variable)
+    if (length(parents) > 0) {
+      prob <- compute_cpt(data, variable, parents, lvs, replace.unidentifiable)$prob
+    } else {
+      # counting occurrences of the variable no parents
+      prob <- unlist(lapply(lvs[[variable]], \(x)
+        nrow(data[data[, variable] == x, ]) / nrow(data)))
+    }
+    fitted[[variable]] <- list(
+      node     = variable,
+      parents  = parents,
+      children = children,
+      prob     = array(
+        prob,
+        dim      = unname(unlist(lapply(lvs[c(variable, parents)], length))),
+        dimnames = lvs[c(variable, parents)]
+      )
+    )
+  }
+  fitted
+}
+
 learn_param_d_data = function(dbn, data,
                               static_nodes,
                               dynamic_nodes,
                               replace.unidentifiable = FALSE) {
-  vars = colnames(data)[!colnames(data) %in% c('Time', 'Sample_id')]
-
-  # build levels lookup for each node at _0, _t and _t-1
-  lvs = list()
-  for (i in vars) {
-    var   <- gsub(" ", "", paste(i, '_0'))
-    var_1 <- gsub(" ", "", paste(i, '_t'))
-    var_2 <- gsub(" ", "", paste(i, '_t-1'))
-    lvs[[var]]   <- sort(as.array(levels(factor(data[[i]]))))
-    lvs[[var_1]] <- sort(as.array(levels(factor(data[[i]]))))
-    lvs[[var_2]] <- sort(as.array(levels(factor(data[[i]]))))
-  }
-
   # df_0: time-0 slice with _0 suffix
-  df_0 <- data[data$Time == 0,]
-  names(df_0) <-
-    lapply(names(data), function(x)
-      ifelse(x %in% c('Sample_id', 'Time'), x, gsub(" ", "", paste(x, '_0'))))
+  # get data.set for time 0 slice
+  # substitue names of variables with _0 at the end
+  df_0 = data[data$Time == 0,]
+  names(df_0) = lapply(names(df_0), concat_name_post, postfix = "_0")
 
-  # df_transition: full data renamed with _t-1, then leaded into _t
-  df_transition <- data
-  names(df_transition) <-
-    lapply(names(data), function(x)
-      ifelse(x %in% c('Sample_id', 'Time'), x, gsub(" ", "", paste(x, '_t-1'))))
-  for (k in dynamic_nodes) {
-    df_transition <-
-      df_transition %>% dplyr::group_by(Sample_id) %>% dplyr::mutate(!!k := dplyr::lead(get(gsub(
-        " ", "", paste(k, '-1')
-      )), n = 1, default = NA))
-  }
-  df_transition <-
-    df_transition %>% dplyr::ungroup() %>% stats::na.omit()
-
-  dbn_fitted = list()
-
-  for (f in static_nodes) {
-    f_star <- strsplit(f, '_')[[1]]
-    f_1 <- paste(f_star[1:(length(f_star) - 1)], collapse = '_')
-    temp_f <-
-      ifelse(f_star[length(f_star)] == '0', 't_0', f_star[length(f_star)])
-    parents <- dbn[['nodes']][[f_1]][[temp_f]][['parents']]
-    children <- dbn[['nodes']][[f_1]][[temp_f]][['children']]
-    if (length(parents) > 0) {
-      pr <-
-        df_0[, c(rev(parents), f)] %>% dplyr::group_by_all() %>% dplyr::count() %>% dplyr::ungroup() %>% tidyr::complete(!!! rlang::syms(c(rev(parents), f))) %>% replace(is.na(.), 0) %>% dplyr::group_by(dplyr::across(rev(parents))) %>% dplyr::reframe(!!dplyr::sym(f), prob = n/sum(n)) %>% dplyr::ungroup() %>% dplyr::arrange_all(.vars = c(rev(parents), f))
-      if (any(is.na(pr$prob))) {
-        if (replace.unidentifiable) {
-          pr$prob <- replace(pr$prob, is.na(pr$prob), 1/length(lvs[[f]]))
-        } else {
-          warning("WARNING: Probabilities of the conditioning set equal to 0: Relative frequency is NULL")
-        }
+  # if markov order > 1 compute values of p(A_t=lvls), ...
+  markov_order = dbn$markov_order
+  if (markov_order > 1) {
+    priors <- list()
+    for (t in seq_len(markov_order - 1)) {
+      df_t <- data[data$Time == t, ]
+      for (var in vars) {
+        key <- paste0(var, "_", t)
+        counts   <- table(df_t[[var]])
+        priors[[key]] <- counts / sum(counts)
       }
-      dbn_fitted[[f]] <-
-        list(
-          node = f,
-          parents = parents,
-          children = children,
-          prob = array(
-            pr$prob,
-            dim = unname(unlist(lapply(lvs[c(f, parents)], length))),
-            dimnames = lvs[c(f, parents)]
-          )
-        )
-    } else {
-      prob_vec <-
-        unlist(lapply(lvs[[f]], function(x)
-          nrow(df_0[df_0[, f] == x,]) / nrow(df_0)))
-      dbn_fitted[[f]] <-
-        list(
-          node = f,
-          parents = parents,
-          children = children,
-          prob = array(
-            prob_vec,
-            dim = unname(unlist(lapply(lvs[c(f, parents)], length))),
-            dimnames = lvs[c(f, parents)]
-          )
-        )
     }
+    dbn_fitted[["priors"]] <- priors
   }
 
-  for (g in dynamic_nodes) {
-    g_star <- strsplit(g, '_')[[1]]
-    g_1 <- paste(g_star[1:(length(g_star) - 1)], collapse = '_')
-    temp_g <-
-      ifelse(g_star[length(g_star)] == '0', 't_0', g_star[length(g_star)])
-    parents <- dbn[['nodes']][[g_1]][[temp_g]][['parents']]
-    children <- dbn[['nodes']][[g_1]][[temp_g]][['children']]
-    if (length(parents) > 0) {
-      pr <-
-        df_transition[, c(rev(parents), g)] %>% dplyr::group_by_all() %>% dplyr::count() %>% dplyr::ungroup() %>% tidyr::complete(!!! rlang::syms(c(rev(parents), g))) %>% replace(is.na(.), 0) %>% dplyr::group_by(dplyr::across(rev(parents))) %>% dplyr::reframe(!!dplyr::sym(g), prob = n/sum(n)) %>% dplyr::ungroup() %>% dplyr::arrange_all(.vars = c(rev(parents), g))
-      if (any(is.na(pr$prob))) {
-        if (replace.unidentifiable) {
-          pr$prob <- replace(pr$prob, is.na(pr$prob), 1/length(lvs[[g]]))
-        } else {
-          warning("WARNING: Probabilities of the conditioning set equal to 0: Relative frequency is NULL")
-        }
-      }
-      dbn_fitted[[g]] <-
-        list(
-          node = g,
-          parents = parents,
-          children = children,
-          prob = array(
-            pr$prob,
-            dim = unname(unlist(lapply(lvs[c(g, parents)], length))),
-            dimnames = lvs[c(g, parents)]
-          )
-        )
-    } else {
-      prob_vec <-
-        unlist(lapply(lvs[[g]], function(x)
-          nrow(df_transition[df_transition[, g] == x,]) / nrow(df_transition)))
-      dbn_fitted[[g]] <-
-        list(
-          node = g,
-          parents = parents,
-          children = children,
-          prob = array(
-            prob_vec,
-            dim = unname(unlist(lapply(lvs[c(g, parents)], length))),
-            dimnames = lvs[c(g, parents)]
-          )
-        )
-    }
+  # build transition dataframe A_t, ..., A_t-i
+  df_transition = build_shifted_df(data, markov_order = markov_order, separator = "-")
+
+  # build levels lookup for each node at _0, _t and _t-k
+  lvs = list()
+  for (var in names(df_transition)) {
+    lvs[[var]] <- sort(as.array(levels(factor(df_transition[[var]]))))
   }
+  for (var in names(df_0)) {
+    lvs[[var]] <- sort(as.array(levels(factor(df_0[[var]]))))
+  }
+
+  dbn_fitted <- c(
+    fit_nodes_discrete(static_nodes,  df_0,          dbn, lvs, replace.unidentifiable),
+    fit_nodes_discrete(dynamic_nodes, df_transition, dbn, lvs, replace.unidentifiable)
+  )
 
   class(dbn_fitted) <- "dbn.fit"
   dbn_fitted
 }
+
 
 learn_param_d_cpts = function(dbn, CPTs,
                               static_nodes,
@@ -253,13 +213,14 @@ learn_param_d_cpts = function(dbn, CPTs,
   defined_levels <- list()
   nodes_info <- list()
 
-  for (i in nodes) {
-    CPT <- CPTs[[i]]
+  for (variable in nodes) {
+    CPT <- CPTs[[variable]]
+    # checking numeric and all probs sum to 1
     if (!(all(lapply(CPT, class) == 'numeric')))
       stop("ERROR: Probabilities must be numeric")
     if (length(dim(CPT)) > 1) {
       l <- length(dim(CPT))
-      idx_target <- which(names(dimnames(CPT)) == i)
+      idx_target <- which(names(dimnames(CPT)) == variable)
       if (!(all(apply(CPT, setdiff(1:l, idx_target), sum) == as.character(1))))
         stop("ERROR: Probabilities for each conditioning set must sum to 1")
     } else {
@@ -267,41 +228,35 @@ learn_param_d_cpts = function(dbn, CPTs,
         stop("ERROR: Probabilities for each conditioning set must sum to 1")
     }
 
-    i_star <- strsplit(i, '_')[[1]]
-    i_1 <- paste(i_star[1:(length(i_star) - 1)], collapse = '_')
-    temp_i <-
-      ifelse(i_star[length(i_star)] == '0', 't_0', i_star[length(i_star)])
-    parents <- dbn[['nodes']][[i_1]][[temp_i]][['parents']]
-    children <- dbn[['nodes']][[i_1]][[temp_i]][['children']]
+    parents = get_parent_set(dbn, variable)
+    children = get_children_set(dbn, variable)
 
-    if (!setequal(setdiff(names(dimnames(CPT)), i), parents))
+    # check dimentions against parent set
+    if (!setequal(setdiff(names(dimnames(CPT)), variable), parents))
       stop("ERROR: CPTs do not match parents set")
 
-    def_lev <-
-      c(dimnames(CPT),
-        setNames(dimnames(CPT), array(unlist(
-          sapply(names(dimnames(CPT)), function(x) {
-            gsub(" ", "", paste(substring(x, 1, (nchar(x) - 2)), '_t'))
-          })
-        ))),
-        setNames(dimnames(CPT), array(unlist(
-          sapply(names(dimnames(CPT)), function(x) {
-            gsub(" ", "", paste(substring(x, 1, (nchar(x) - 2)), '_t-1'))
-          })
-        ))))
-    int_nodes <- intersect(names(def_lev), names(defined_levels))
-    for (c in int_nodes) {
-      if (!(setequal(def_lev[[c]], defined_levels[[c]])))
-        stop("ERROR: Inconsistency in node's levels")
+    # add levels of this variable to levels stored
+    var_name = get_variable_name(variable)
+    defined_levels[[var_name]] = dimnames(CPT)[[variable]]
+    
+    # checking parent levels metch stored levels of variable
+    if(length(dimnames(CPT)) > 1){ 
+      dim_names = dimnames(CPT)[2:length(dimnames(CPT))]
+      for (parent in names(dim_names)) {
+        parent_name = get_variable_name(parent)
+        if (!(setequal(dim_names[[parent]], defined_levels[[parent_name]])))
+          stop(paste("ERROR: Inconsistency in node's levels for variable", 
+                  variable, "expected", defined_levels[[parent_name]], 
+                  "for parent", parent_name, "got", dim_names[[parent]]))
+      }
     }
-    defined_levels <-
-      c(defined_levels, def_lev[setdiff(names(def_lev), names(defined_levels))])
-    nodes_info[[i]] <-
+    
+    nodes_info[[variable]] <-
       list(
-        node = i,
+        node = variable,
         parents = parents,
         children = children,
-        prob = aperm(CPT, c(i, parents))
+        prob = aperm(CPT, c(variable, parents))
       )
   }
 
@@ -473,3 +428,9 @@ learn_param_g_data = function(dbn, data = data.frame(),
   class(nodes_info) = "dbn.fit"
   nodes_info
 }
+
+
+
+
+
+

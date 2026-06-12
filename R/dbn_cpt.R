@@ -232,3 +232,79 @@ define_CPTs <-
     }
     CPTs
   }
+
+
+
+define_cpd = function(variable = ' ', 
+                      dbn = empty_DBN(dynamic_nodes = c(), 
+                                      markov_order = 1)) {
+  
+  if (!class(dbn) == 'DBN')
+    stop("ERROR: dbn argument is not of class 'DBN'")
+  if (!is.character(variable))
+    stop("ERROR: variable is not a character")
+  
+  var_name = get_variable_name(variable)
+  var_time = get_variable_time(variable)
+   
+  # check variable is actually in dbn
+  if (!(var_name %in% names(dbn$nodes) & 
+      var_time %in% names(dbn$nodes[[var_name]]))){
+    stop("ERROR: variable must be a DBN node")
+  }
+  
+  # get parents of variable
+  var_parents = dbn$nodes[[var_name]][[var_time]]$parents
+  cat('target variable name:', variable)
+  cat('\nconditioning set:', 
+      if (length(var_parents) == 0) "{empty}" 
+      else paste(var_parents, collapse = ", "))
+  
+  # parents conditioning set + intercept + std res
+  n_params = length(var_parents) + 2
+  regs = c()
+  for (param in 1:n_params) {
+    if (param == 1 | param == n_params) {
+      prompt = ifelse(param == 1, 
+                 paste("Intercept for ", variable),
+                 paste("Standard dev of residuals for ", variable))
+    } else {
+      prompt = paste("Regressor of ", var_parents[param - 1], 
+                "for variable ", variable)
+    }
+    val = as.numeric(readline(prompt = prompt))
+    if (param == n_params & val < 0) 
+      stop("ERROR: Standard deviation of residuals must be positive")
+    regs = c(regs, val)
+  }
+  
+  reg_names = c(intercept_name, var_parents, std_name)
+  assign(
+    gsub(' ', '', paste(variable, '.regs')),
+    array(regs, dim = n_params, dimnames = list(reg_names))
+  )
+  get(gsub(' ', '', paste(variable, '.regs')))
+  # Add class CPD
+  
+}
+
+define_cpds = function(dbn = empty_DBN(dynamic_nodes = c(), markov_order = 1)) {
+  g_0 = from_DBN_to_G_0(dbn)
+  static_nodes = bnlearn::node.ordering(g_0)
+  
+  g_t = from_DBN_to_G_transition(dbn)
+  node_order = bnlearn::node.ordering(g_t)
+  nodes =c(static_nodes, 
+           quanteda::char_select(node_order, "*t", 
+                                 valuetype = "glob"))
+  
+  Regs = list()
+  for (node in nodes) {
+    reg = define_cpd(variable = node, 
+                     dbn = dbn)
+    Regs[[node]] = reg
+  }
+  
+  # Add class CPDs
+  Regs
+}
