@@ -41,12 +41,12 @@ The table below highlights the main features currently implemented in DBNcare. F
 | Feature             | Discrete | Continuous | Mixed     |
 |---------------------|----------|------------|-----------|
 | Missing Values      | ❌       | ❌         | ❌        |
-| Parameter Learning  | ✔️       | ❌         | ❌        |
-| Structure Learning  | ✔️       | ❌         | ❌        |
-| Exact Inference     | ✔️       | ❌         | ❌        |
-| Approximate Inference| ✔️      | ❌         | ❌        |
-| Forecasting          | ✔️      | ❌         | ❌        |
-| Sampling             | ✔️      | ❌         | ❌        |
+| Parameter Learning  | ✔️       | ✔️         | ❌        |
+| Structure Learning  | ✔️       | ✔️         | ❌        |
+| Exact Inference     | ✔️       | ✔️         | ❌        |
+| Approximate Inference| ✔️      | ✔️         | ❌        |
+| Forecasting          | ✔️      | ✔️         | ❌        |
+| Sampling             | ✔️      | ✔️         | ❌        |
 
 ## License
 <a name="license"></a>
