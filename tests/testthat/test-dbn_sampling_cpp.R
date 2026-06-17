@@ -3,7 +3,7 @@
 # implementation, so with the same seed the two functions must return the
 # same dataset.
 
-# named CPD vector in the format expected by dbn.fit(CPDs = ...)
+# named CPD vector in the format expected by dbn.fit(distribution = ...)
 cpd_for <- function(dbn, node, intercept, coefs, sd) {
   parents <- get_parent_set(dbn, node)
   stopifnot(setequal(names(coefs), parents))
@@ -12,7 +12,7 @@ cpd_for <- function(dbn, node, intercept, coefs, sd) {
   values
 }
 
-# binary CPT array in the format expected by dbn.fit(CPTs = ...):
+# binary CPT array in the format expected by dbn.fit(distribution = ...):
 # P(node = "yes" | parents) = base_p + sum of bumps[parent] over parents at "yes"
 cpt_for <- function(dbn, node, base_p, bumps = c(), levels = c("no", "yes")) {
   parents <- get_parent_set(dbn, node)
@@ -59,7 +59,7 @@ structure_mo2 <- function() {
 
 test_that("dbn.sampling matches dbn.sampling on a gaussian network", {
   truth <- structure_mo1()
-  fit <- dbn.fit(DBN = truth, CPDs = list(
+  fit <- dbn.fit(DBN = truth, distribution = list(
     A_0 = cpd_for(truth, "A_0", 0.0, c(), 1.0),
     B_0 = cpd_for(truth, "B_0", 0.0, c(), 1.0),
     C_0 = cpd_for(truth, "C_0", 1.0, c(A_0 = 0.8, B_0 = -0.7), 0.5),
@@ -77,7 +77,7 @@ test_that("dbn.sampling matches dbn.sampling on a gaussian network", {
 
 test_that("dbn.sampling matches dbn.sampling on a discrete network", {
   truth <- structure_mo1()
-  fit <- dbn.fit(DBN = truth, CPTs = list(
+  fit <- dbn.fit(DBN = truth, distribution = list(
     A_0 = cpt_for(truth, "A_0", 0.45),
     B_0 = cpt_for(truth, "B_0", 0.55),
     C_0 = cpt_for(truth, "C_0", 0.10, c(A_0 = 0.35, B_0 = 0.45)),
@@ -95,7 +95,7 @@ test_that("dbn.sampling matches dbn.sampling on a discrete network", {
 
 test_that("dbn.sampling matches dbn.sampling with markov order 2 (gaussian)", {
   truth <- structure_mo2()
-  fit <- dbn.fit(DBN = truth, CPDs = list(
+  fit <- dbn.fit(DBN = truth, distribution = list(
     A_0 = cpd_for(truth, "A_0", 0.0, c(), 1.0),
     B_0 = cpd_for(truth, "B_0", 0.5, c(A_0 = 0.9), 0.7),
     A_t = cpd_for(truth, "A_t", 0.1, c(`A_t-1` = 0.6), 0.4),
@@ -111,7 +111,7 @@ test_that("dbn.sampling matches dbn.sampling with markov order 2 (gaussian)", {
 
 test_that("dbn.sampling matches dbn.sampling with markov order 2 (discrete)", {
   truth <- structure_mo2()
-  fit <- dbn.fit(DBN = truth, CPTs = list(
+  fit <- dbn.fit(DBN = truth, distribution = list(
     A_0 = cpt_for(truth, "A_0", 0.40),
     B_0 = cpt_for(truth, "B_0", 0.20, c(A_0 = 0.50)),
     A_t = cpt_for(truth, "A_t", 0.15, c(`A_t-1` = 0.70)),
@@ -143,7 +143,7 @@ test_that("dbn.sampling handles CPTs whose levels are ordered differently", {
   dims_B_t <- list(B_t = B_lv, A_t = A_lv_t)
   dims_B_t[["B_t-1"]] <- B_lv
 
-  fit <- dbn.fit(DBN = dbn, CPTs = list(
+  fit <- dbn.fit(DBN = dbn, distribution = list(
     A_0 = array(c(0.4, 0.6), dim = 2, dimnames = list(A_0 = A_lv_0)),
     B_0 = array(c(0.3, 0.7, 0.8, 0.2), dim = c(2, 2),
                 dimnames = list(B_0 = B_lv, A_0 = A_lv_0)),
@@ -161,7 +161,7 @@ test_that("dbn.sampling handles CPTs whose levels are ordered differently", {
 
 test_that("dbn.sampling validates its inputs like dbn.sampling", {
   truth <- structure_mo1()
-  fit <- dbn.fit(DBN = truth, CPTs = list(
+  fit <- dbn.fit(DBN = truth, distribution = list(
     A_0 = cpt_for(truth, "A_0", 0.45),
     B_0 = cpt_for(truth, "B_0", 0.55),
     C_0 = cpt_for(truth, "C_0", 0.10, c(A_0 = 0.35, B_0 = 0.45)),

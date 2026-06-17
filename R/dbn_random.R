@@ -168,7 +168,7 @@ generate_dbn_nodes_distributions <-
               dim_names_n_t)
     }
     CPTs <- list_cpt
-    fitted_dbn <- dbn.fit(DBN = generated_dbn, CPTs = list_cpt)
+    fitted_dbn <- dbn.fit(DBN = generated_dbn, distribution = list_cpt)
     
     return(fitted_dbn)
   }

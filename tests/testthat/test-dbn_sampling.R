@@ -51,7 +51,7 @@ CPTs_toy <- list(
   B_t = B_t.prob
 )
 # fitting the dbn network dbn.fit object
-fitted_DBN <- dbn.fit(DBN = DBN_example, CPTs = CPTs_toy)
+fitted_DBN <- dbn.fit(DBN = DBN_example, distribution = CPTs_toy)
 
 # G_0 bn.fit object
 bn_0 <-  from_fitted_DBN_to_fitted_G_0(fitted_DBN)
@@ -373,7 +373,7 @@ test_that(
       C_t = C_t.prob
     )
     #defining the two dbns
-    fitted_my_dbn <- dbn.fit(my_dbn, CPTs_mydbn)
+    fitted_my_dbn <- dbn.fit(my_dbn, distribution = CPTs_mydbn)
     sampled_dataset <-
       dbn.sampling(fitted_dbn = fitted_my_dbn, 15e+3, 5)
     fitted_dbn_with_param_learning <-

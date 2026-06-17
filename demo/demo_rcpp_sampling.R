@@ -57,7 +57,7 @@ cat("designed G_t:", truth_ms$g_t, "\n")
 # ============================================================================
 section("gaussian DBN")
 
-# named CPD vector in the format expected by dbn.fit(CPDs = ...):
+# named CPD vector in the format expected by dbn.fit(distribution = ...):
 # (Intercept), coefficients in the stored parents order, Std (res)
 make_cpd <- function(dbn, node, intercept, coefs, sd) {
   parents <- get_parent_set(dbn, node)
@@ -75,7 +75,7 @@ cpds <- list(
   B_t = make_cpd(truth, "B_t",  0.2, c(`B_t-1` = 0.5), 0.4),
   C_t = make_cpd(truth, "C_t", -0.3, c(`C_t-1` = 0.4, A_t = 0.7, B_t = -0.6), 0.3)
 )
-fit_gaussian <- dbn.fit(DBN = truth, CPDs = cpds)
+fit_gaussian <- dbn.fit(DBN = truth, distribution = cpds)
 
 # --- equivalence with dbn.sampling under the same seed ---------------------
 n_samples <- 800
@@ -104,7 +104,7 @@ check("gaussian: hc.dbn reconstructs G_t", same_structure(truth_ms$g_t, learned_
 # ============================================================================
 section("discrete DBN")
 
-# CPT array in the format expected by dbn.fit(CPTs = ...):
+# CPT array in the format expected by dbn.fit(distribution = ...):
 # P(node = "yes" | parents) = base_p + sum of bumps[parent] over parents at "yes"
 make_cpt <- function(dbn, node, base_p, bumps = c(), levels = c("no", "yes")) {
   parents <- get_parent_set(dbn, node)
@@ -133,7 +133,7 @@ cpts <- list(
   B_t = make_cpt(truth, "B_t", 0.15, c(`B_t-1` = 0.65)),
   C_t = make_cpt(truth, "C_t", 0.05, c(`C_t-1` = 0.30, A_t = 0.30, B_t = 0.30))
 )
-fit_discrete <- dbn.fit(DBN = truth, CPTs = cpts)
+fit_discrete <- dbn.fit(DBN = truth, distribution = cpts)
 
 # --- equivalence with dbn.sampling under the same seed ---------------------
 n_samples_d <- 2000

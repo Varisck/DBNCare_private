@@ -14,67 +14,71 @@ get_dynamic_nodes = function(dbn) {
 
 #' Function for parameter learning in Dynamic Bayesian Networks
 #'
-#' Dispatcher for parameter learning. Routes to the discrete or gaussian
-#' subroutine based on what the user provides:
+#' Dispatcher for parameter learning. Routes to the discrete, gaussian, or
+#' mixed subroutine based on the type of \code{distribution} provided:
 #' \itemize{
-#'   \item \code{CPTs} non-empty -> discrete network learned from CPTs
-#'   \item \code{CPDs} non-empty -> gaussian network learned from CPDs
-#'   \item only \code{data}      -> dataset_type(data) decides the subroutine
+#'   \item arrays (CPTs)                        -> discrete network
+#'   \item named numeric vectors (CPDs)         -> gaussian network
+#'   \item lists with \code{$coef}/\code{$sd} (CLG) -> mixed network (not yet supported)
+#'   \item only \code{data}                     -> dataset_type(data) decides the subroutine
 #' }
-#' Exactly one of \code{CPTs}, \code{CPDs} or \code{data} must be non-empty.
+#' Exactly one of \code{distribution} or \code{data} must be non-NULL/non-empty.
 #'
 #' @param DBN object of class 'dbn'
-#' @param CPTs list of multi-dimensional arrays (CPTs for each DBN node, discrete)
-#' @param CPDs list of named numeric vectors (regression coefficients + std, gaussian)
+#' @param distribution named list of per-node distributions. Each entry is one of:
+#'   a multi-dimensional array (CPT, discrete), a named numeric vector
+#'   (regression coefficients + std, gaussian), or a \code{list(coef, sd)} (CLG, mixed).
+#'   The type is detected automatically via \code{figure_out_distribution_type}.
 #' @param data data.frame object
 #' @param replace.unidentifiable If TRUE conditional probabilities for unobserved
 #'   parents combinations (unidentifiable parameters) are replaced by uniform
 #'   conditional probabilities, if FALSE (default) they are set as NA. Discrete only.
-#' 
-#' @description If a data.frame is given, the function inspects the class of each column exept
-#'   \code{Time} and \code{Sample_id}, if all columns are factor discrete parameter learning is used
-#'   if they are all numeric gaussian parameter learning. Mixed case is not supported at the time.
+#'
+#' @description If a data.frame is given, the function inspects the class of each column except
+#'   \code{Time} and \code{Sample_id}: if all columns are factor, discrete parameter learning is
+#'   used; if all columns are numeric, gaussian parameter learning is used. Mixed case is not
+#'   supported yet.
 #'
 #' @return object of class 'dbn.fit'
 #' @export
 #'
 #' @examples
 #' learned_dbn <- dbn.fit(DBN = DBN_example, data = sampling_set)
-dbn.fit <- function(DBN, CPTs = list(), CPDs = list(), 
+dbn.fit <- function(DBN, distribution = NULL, 
                     data = data.frame(), 
                     replace.unidentifiable = FALSE) {
   if (!class(DBN) == 'dbn')
     stop("ERROR: DBN argument is not of class 'dbn'")
-  if (!class(CPTs) == 'list')
-    stop("ERROR: CPTs argument is not of class 'list'")
-  if (!class(CPDs) == 'list')
-    stop("ERROR: CPDs argument is not of class 'list'")
   if (!class(data) == 'data.frame')
     stop("ERROR: data argument is not of class 'data.frame'")
   if (any(is.na(DBN)))
     stop("ERROR: missing data detected")
 
-  # exactly one of CPTs / CPDs / data must be non-empty
-  sources = c(length(CPTs) > 0, length(CPDs) > 0, nrow(data) > 0)
-  if (sum(sources) == 0)
-    stop("ERROR: one of CPTs, CPDs or data must be provided to learn the parameters of the DBN")
-  if (sum(sources) > 1)
-    stop("ERROR: only one between CPTs, CPDs or data must be defined to learn the parameters of the DBN")
-
   static_nodes = get_static_nodes(DBN)
   dynamic_nodes = get_dynamic_nodes(DBN)
 
-  # discrete from CPTs
-  if (length(CPTs) > 0)
-    return(learn_param_d_cpts(DBN, CPTs = CPTs,
-                              static_nodes = static_nodes,
-                              dynamic_nodes = dynamic_nodes))
+  sources = c(!is.null(distribution), nrow(data) > 0)
+  if (sum(sources) == 0)
+    stop("ERROR: one of distribution or data must be provided to learn the parameters of the DBN")
+  if (sum(sources) > 1)
+    stop("ERROR: only one of distribution or data must be provided to learn the parameters of the DBN")
 
-  # gaussian from CPDs
-  if (length(CPDs) > 0)
-    return(learn_param_g_cpds(DBN, CPDs = CPDs,
-                              static_nodes = static_nodes,
-                              dynamic_nodes = dynamic_nodes))
+  if (!is.null(distribution)) {
+    distribution_type = figure_out_distribution_type(distribution)
+
+    if (distribution_type == 'discrete')
+      return(learn_param_d_cpts(DBN, CPTs = distribution,
+                                static_nodes = static_nodes,
+                                dynamic_nodes = dynamic_nodes))
+
+    if (distribution_type == 'gaussian')
+      return(learn_param_g_cpds(DBN, CPDs = distribution,
+                                static_nodes = static_nodes,
+                                dynamic_nodes = dynamic_nodes))
+
+    if (distribution_type == 'mixed')
+      stop("ERROR: mixed distributions are not supported yet")
+  }
 
   # only data was provided: dispatch on dataset_type
 
@@ -102,6 +106,17 @@ dbn.fit <- function(DBN, CPTs = list(), CPDs = list(),
   stop("ERROR: mixed datasets are not supported yet")
 }
 
+figure_out_distribution_type = function(dist) {
+  is_clg      <- sapply(dist, \(x) is.list(x) && !is.null(x$coef) && !is.null(x$sd))
+  is_discrete <- sapply(dist, is.array)
+  is_gaussian <- sapply(dist, \(x) is.numeric(x) && is.vector(x))
+
+  if (any(is_clg))       return("mixed")
+  if (all(is_gaussian))  return("gaussian")
+  if (all(is_discrete))  return("discrete")
+
+  stop("ERROR: could not determine distribution type — entries must be arrays (CPT), numeric vectors (CPD), or list(coef, sd) (CLG)")
+}
 
 # ---- discrete subroutines -------------------------------------------------
 
@@ -156,7 +171,7 @@ fit_nodes_discrete <- function(nodes, data, dbn, lvs, replace.unidentifiable) {
 learn_param_d_data = function(dbn, data,
                               static_nodes,
                               dynamic_nodes,
-                              replace.unidentifiable = FALSE) {
+                              replace.unidentifiable) {
   # df_0: time-0 slice with _0 suffix
   # get data.set for time 0 slice
   # substitue names of variables with _0 at the end
@@ -429,6 +444,38 @@ learn_param_g_data = function(dbn, data = data.frame(),
   nodes_info
 }
 
+
+# ---- Mixed subroutines -------------------------------------------------
+
+
+
+
+stuff = function() {
+  A_t.prob = array(c(1, 0.2, 0.3,
+                     1, 0.4, 0.2,
+                     1, 0.1, 0.4,
+                     1, 0.2, 0.6),
+                     dim = c(3, 2, 2),
+                     dimnames = list(
+                      A_t = c(intercept_name, "A_t-1", "C_t"),
+                      D_t = c("yes", "no"),
+                      B_t = c("yes", "no")
+                     ))
+
+  expand.grid(dimnames(A_t.prob)[2:3])
+
+  fitted.prob = array(c(1, 0.2, 0.3,
+                        1, 0.4, 0.2,
+                        1, 0.1, 0.4,
+                        1, 0.2, 0.6),
+                        dim = c(3, 4),
+                        dimnames = list(
+                          A_t = c(intercept_name, "A_t-1", "C_t"),
+                          comb = (1:nrow(expand.grid(dimnames(A_t.prob)[2:3])))
+                        ))
+
+  A_t.dist = list(coef = A_t.prob, sd = c(.1, .1, .1, .1))
+}
 
 
 

@@ -15,7 +15,7 @@ build_conv_dbn_fit <- function() {
   A_lv <- c("yes", "no")
   B_lv <- c("high", "low")
   dims_At <- list(A_t = A_lv); dims_At[["A_t-1"]] <- A_lv
-  dbn.fit(DBN = dbn, CPTs = list(
+  dbn.fit(DBN = dbn, distribution = list(
     A_0 = array(c(0.3, 0.7), dim = 2, dimnames = list(A_0 = A_lv)),
     B_0 = array(c(0.6, 0.4, 0.2, 0.8), dim = c(2, 2),
                 dimnames = list(B_0 = B_lv, A_0 = A_lv)),

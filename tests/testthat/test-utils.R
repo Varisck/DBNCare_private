@@ -118,7 +118,7 @@ test_that("get_unrolled_dbn returns the correct output", {
     C_t = C_t.prob
   )
   #fitting the dbn
-  fitted_my_dbn <- dbn.fit(my_dbn, CPTs_mydbn)
+  fitted_my_dbn <- dbn.fit(my_dbn, distribution = CPTs_mydbn)
   dbn_unrolled <- get_unrolled_dbn(fitted_my_dbn, 4)
   all_nodes <- bnlearn::nodes(dbn_unrolled)
   all_arcs <- bnlearn::arcs(dbn_unrolled)
@@ -495,7 +495,7 @@ test_that("get_unrolled_dbn returns the correct output", {
     C_t = C_t.prob
   )
   #fitting the dbn
-  fitted_my_dbn <- dbn.fit(my_dbn, CPTs_mydbn)
+  fitted_my_dbn <- dbn.fit(my_dbn, distribution = CPTs_mydbn)
   dbn_unrolled <- get_unrolled_dbn(fitted_my_dbn, 4)
   
   expect_equal(as.vector(dbn_unrolled$A_0$prob), as.vector(fitted_my_dbn$A_0$prob))
@@ -622,7 +622,7 @@ test_that("get_unrolled_dbn raises error in case of wrong inputs", {
     C_t = C_t.prob
   )
   #fitting the dbn
-  fitted_my_dbn <- dbn.fit(my_dbn, CPTs_mydbn)
+  fitted_my_dbn <- dbn.fit(my_dbn, distribution = CPTs_mydbn)
   expect_error(get_unrolled_dbn(c(),4))
   expect_error(get_unrolled_dbn(fitted_my_dbn, "3"))
 })
@@ -746,7 +746,7 @@ test_that(" get_node_edges error in case of wrong inputs", {
     C_t = C_t.prob
   )
   #fitting the dbn
-  fitted_my_dbn <- dbn.fit(my_dbn, CPTs_mydbn)
+  fitted_my_dbn <- dbn.fit(my_dbn, distribution = CPTs_mydbn)
   g_transition<- from_fitted_DBN_to_fitted_G_transition(fitted_my_dbn)
   expect_error(get_node_edges(c(),"A_t", 3))
   expect_error(get_node_edges(g_transition,3,3))

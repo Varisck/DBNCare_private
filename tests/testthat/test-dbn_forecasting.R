@@ -49,7 +49,7 @@ CPTs_toy <- list(
   A_t = A_t.prob,
   B_t = B_t.prob
 )
-fitted_DBN <- dbn.fit(DBN = DBN_example, CPTs = CPTs_toy)
+fitted_DBN <- dbn.fit(DBN = DBN_example, distribution = CPTs_toy)
 
 
 # testing dbn.forecasting input validation
@@ -210,7 +210,7 @@ test_that(
       A_0 = A_0.prob, B_0 = B_0.prob, C_0 = C_0.prob,
       A_t = A_t.prob, B_t = B_t.prob, C_t = C_t.prob
     )
-    fitted_my_dbn <- dbn.fit(my_dbn, CPTs_mydbn)
+    fitted_my_dbn <- dbn.fit(my_dbn, distribution = CPTs_mydbn)
 
     observations <- list(Time = c(0),
                          Sample_id = c("sample1"),
@@ -351,7 +351,7 @@ test_that(
       dimnames = dims_C_t
     )
 
-    fitted_my_dbn <- dbn.fit(my_dbn, list(
+    fitted_my_dbn <- dbn.fit(my_dbn, distribution = list(
       A_0 = A_0.prob, B_0 = B_0.prob, C_0 = C_0.prob,
       A_t = A_t.prob, B_t = B_t.prob, C_t = C_t.prob
     ))

@@ -70,8 +70,8 @@ cpds_truth <- build_ground_truth_cpds()
 
 # ----- 1. fit from CPDs and check the fit matches the CPDs ------------------
 
-test_that("dbn.fit(CPDs) produces a gaussian dbn.fit", {
-  fitted <- dbn.fit(DBN = dbn_truth, CPDs = cpds_truth)
+test_that("dbn.fit(distribution = CPDs) produces a gaussian dbn.fit", {
+  fitted <- dbn.fit(DBN = dbn_truth, distribution = cpds_truth)
   expect_equal(class(fitted), "dbn.fit")
   expect_equal(dbn_type(fitted), "gaussian")
   expect_setequal(names(fitted),
@@ -79,7 +79,7 @@ test_that("dbn.fit(CPDs) produces a gaussian dbn.fit", {
 })
 
 test_that("regs and std stored in dbn.fit match the input CPDs exactly", {
-  fitted <- dbn.fit(DBN = dbn_truth, CPDs = cpds_truth)
+  fitted <- dbn.fit(DBN = dbn_truth, distribution = cpds_truth)
 
   for (variable in names(cpds_truth)) {
     cpd       <- cpds_truth[[variable]]
@@ -104,7 +104,7 @@ test_that("regs and std stored in dbn.fit match the input CPDs exactly", {
 # pin the sample so the test is reproducible regardless of inherited RNG state
 set.seed(123)
 sampled_data <- dbn.sampling(
-  dbn.fit(DBN = dbn_truth, CPDs = cpds_truth),
+  dbn.fit(DBN = dbn_truth, distribution = cpds_truth),
   n_samples = 500,
   max_time  = 4
 )

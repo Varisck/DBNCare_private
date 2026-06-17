@@ -83,7 +83,7 @@ build_ground_truth_cpds <- function() {
 
 dbn_truth <- build_ground_truth_dbn()
 cpds_truth <- build_ground_truth_cpds()
-fitted_truth <- dbn.fit(DBN = dbn_truth, CPDs = cpds_truth)
+fitted_truth <- dbn.fit(DBN = dbn_truth, distribution = cpds_truth)
 
 # sanity: the auto-detected dbn type must be gaussian
 test_that("ground-truth fitted DBN is gaussian", {

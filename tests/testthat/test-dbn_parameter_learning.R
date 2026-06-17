@@ -25,7 +25,7 @@ test_that("inconsistent parent levels in CPT raises an error", {
   CPTs_bad <- list(A_0 = A_0.prob, B_0 = B_0.prob, A_t = A_t.prob, B_t = B_t.prob)
 
   expect_error(
-    dbn.fit(DBN = dbn, CPTs = CPTs_bad),
+    dbn.fit(DBN = dbn, distribution = CPTs_bad),
     regexp = "Inconsistency in node's levels for variable B_0"
   )
 })
@@ -82,7 +82,7 @@ test_that("CPTs are generated correctly", {
   )
   
   fitted_DBN <-
-    DynamicBayesianNetwork::dbn.fit(DBN = dbn, CPTs = CPTs_toy)
+    DynamicBayesianNetwork::dbn.fit(DBN = dbn, distribution = CPTs_toy)
   expect_equal(class(fitted_DBN), 'dbn.fit')
   expect_equal(fitted_DBN$A_0$node, 'A_0')
   expect_equal(fitted_DBN$B_0$node, 'B_0')
@@ -171,7 +171,7 @@ test_that("Learned G_0 has been generated correctly", {
   )
   
   fitted_DBN <-
-    DynamicBayesianNetwork::dbn.fit(DBN = dbn, CPTs = CPTs_toy)
+    DynamicBayesianNetwork::dbn.fit(DBN = dbn, distribution = CPTs_toy)
   fitted_G_0 <-
     DynamicBayesianNetwork::get.g0.net(fitted_DBN)
   expect_equal(class(fitted_G_0), 'bn.fit')
@@ -232,7 +232,7 @@ test_that("Learned Transition Network has been generated correctly", {
   )
   
   fitted_DBN <-
-    DynamicBayesianNetwork::dbn.fit(DBN = dbn, CPTs = CPTs_toy)
+    DynamicBayesianNetwork::dbn.fit(DBN = dbn, distribution = CPTs_toy)
   fitted_G_transition <-
     DynamicBayesianNetwork::get.transition.net(fitted_DBN)
   expect_equal(class(fitted_G_transition), 'bn.fit')
@@ -291,7 +291,7 @@ test_that("CPTs learned from randomly generate data are almost equal to original
             )
             
             fitted_DBN <-
-              DynamicBayesianNetwork::dbn.fit(DBN = dbn, CPTs = CPTs_toy)
+              DynamicBayesianNetwork::dbn.fit(DBN = dbn, distribution = CPTs_toy)
             N_samples <- 5000
             Time <- 4
             sampling_set <-
@@ -419,7 +419,7 @@ test_that("CPTs learned from randomly generate data are almost equal to original
               Tumor_size_t = Tumor_size_t.prob
             )
             dbn_from_cpts <-
-              DynamicBayesianNetwork::dbn.fit(DBN = dbn_2, CPTs = cpts_2)
+              DynamicBayesianNetwork::dbn.fit(DBN = dbn_2, distribution = cpts_2)
             
             sampling_set_2 <-
               DynamicBayesianNetwork::dbn.sampling(dbn_from_cpts, N_samples, Time)

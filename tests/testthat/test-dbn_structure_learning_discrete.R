@@ -101,7 +101,7 @@ build_ground_truth_CPTs <- function() {
 
 dbn_truth <- build_ground_truth_dbn()
 cpts_truth <- build_ground_truth_CPTs()
-fitted_truth <- dbn.fit(DBN = dbn_truth, CPTs = cpts_truth)
+fitted_truth <- dbn.fit(DBN = dbn_truth, distribution = cpts_truth)
 
 
 # sanity: the auto-detected dbn type must be gaussian
@@ -155,4 +155,45 @@ test_that("tabu recovers the ground-truth discrete DBN structure", {
   g_0_l = bnlearn::model2network(modelstring(learned)$g_0)
   g_0_gt = bnlearn::model2network(modelstring(dbn_truth)$g_0)
   expect_equal(all.equal(g_0_l, g_0_gt), TRUE)
+})
+
+
+
+test_that("structure learning recovers lag-11 arc with hand-tuned parameters", {
+  set.seed(42)
+
+  lv <- c("yes", "no")
+
+  # Only arc: A_t-11 -> B_t, nothing else
+  dbn <- empty.dbn(dynamic_nodes = c("A", "B"), markov_order = 11)
+  dbn <- add.arc.dbn(dbn, from = c("A", "t-11"), to = c("B", "t"))
+
+  # A uniform (0.5/0.5) at every slice: maximises variance in the lag signal
+  # B_t | A_t-11: 0.9 vs 0.1 — strong, symmetric, easy for HC to detect
+  A_0.prob <- array(c(0.5, 0.5), dim = 2,
+                    dimnames = list(A_0 = lv))
+  B_0.prob <- array(c(0.5, 0.5), dim = 2,
+                    dimnames = list(B_0 = lv))
+  A_t.prob <- array(c(0.5, 0.5), dim = 2,
+                    dimnames = list(A_t = lv))
+  B_t.prob <- array(
+    c(0.9, 0.1,   # A_t-11 = "yes" -> B_t = "yes" w.p. 0.9
+      0.1, 0.9),  # A_t-11 = "no"  -> B_t = "yes" w.p. 0.1
+    dim = c(2, 2),
+    dimnames = list(B_t = lv, `A_t-11` = lv)
+  )
+
+  CPTs <- list(A_0 = A_0.prob, B_0 = B_0.prob,
+               A_t = A_t.prob, B_t = B_t.prob)
+
+  dbn_fit <- dbn.fit(DBN = dbn, distribution = CPTs)
+
+  # max_time = 25 gives 14 usable lag-11 transition pairs per trajectory
+  # 2000 trajectories -> ~28000 pairs with a 0.9/0.1 signal: unambiguous
+  data <- dbn.sampling(dbn_fit, n_samples = 2000, max_time = 25)
+
+  learned <- hc.dbn(data, markov_order = 11)
+
+  expect_equal(class(learned), "dbn")
+  expect_true(grepl("A_t-11", modelstring.dbn(learned)$g_t))
 })
