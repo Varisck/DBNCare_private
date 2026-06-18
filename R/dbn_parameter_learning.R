@@ -32,7 +32,9 @@ get_dynamic_nodes = function(dbn) {
 #' @param data data.frame object
 #' @param replace.unidentifiable If TRUE conditional probabilities for unobserved
 #'   parents combinations (unidentifiable parameters) are replaced by uniform
-#'   conditional probabilities, if FALSE (default) they are set as NA. Discrete only.
+#'   conditional probabilities, if FALSE (default) they are set as NA, in the discrete case.
+#'   In the conditional gaussian if replace.unidentifiable is TRUE set variable regressors to marginals
+#'   if FALSE they are set to NA.
 #'
 #' @description If a data.frame is given, the function inspects the class of each column except
 #'   \code{Time} and \code{Sample_id}: if all columns are factor, discrete parameter learning is
@@ -78,9 +80,9 @@ dbn.fit <- function(DBN, distribution = NULL,
                                 dynamic_nodes = dynamic_nodes))
 
     if (distribution_type == 'mixed')
-      return(learn_param_mixed(DBN, distribution = distribution,
-                               static_nodes = static_nodes,
-                               dynamic_nodes = dynamic_nodes))
+      return(learn_param_mixed_dist(DBN, distribution = distribution,
+                                    static_nodes = static_nodes,
+                                    dynamic_nodes = dynamic_nodes))
   }
 
   # only data was provided: dispatch on dataset_type
@@ -106,7 +108,11 @@ dbn.fit <- function(DBN, distribution = NULL,
                               static_nodes = static_nodes,
                               dynamic_nodes = dynamic_nodes))
 
-  stop("ERROR: mixed datasets are not supported yet")
+  if (type == "mixed")
+    return(learn_param_data_mixed(DBN, data = data,
+                                  static_nodes = static_nodes,
+                                  dynamic_nodes = dynamic_nodes,
+                                  replace.unidentifiable = replace.unidentifiable))
 }
 
 figure_out_distribution_type = function(dist) {
@@ -150,7 +156,8 @@ compute_cpt = function(data, variable, parents, lvs, replace.unidentifiable) {
   }  
 }
 
-fit_nodes_discrete <- function(nodes, data, dbn, lvs, replace.unidentifiable) {
+fit_nodes_discrete <- function(nodes, data, dbn, lvs, 
+                               replace.unidentifiable) {
   fitted <- list()
   for (variable in nodes) {
     parents  <- get_parent_set(dbn, variable)
@@ -171,9 +178,7 @@ fit_nodes_discrete <- function(nodes, data, dbn, lvs, replace.unidentifiable) {
   fitted
 }
 
-learn_param_d_data = function(dbn, data,
-                              static_nodes,
-                              dynamic_nodes,
+learn_param_d_data = function(dbn, data, static_nodes, dynamic_nodes, 
                               replace.unidentifiable) {
   # df_0: time-0 slice with _0 suffix
   # get data.set for time 0 slice
@@ -243,9 +248,7 @@ get_node_info_discrete = function(CPT, variable, parents, children, defined_leve
     ))
 }
 
-learn_param_d_cpts = function(dbn, CPTs,
-                              static_nodes,
-                              dynamic_nodes) {
+learn_param_d_cpts = function(dbn, CPTs, static_nodes, dynamic_nodes) {
   nodes = c(static_nodes, dynamic_nodes)
 
   if (!setequal(names(CPTs), nodes))
@@ -324,9 +327,7 @@ get_node_info_gaussian = function(cpd, variable, parents, children) {
     ))
 }
 
-learn_param_g_cpds = function(dbn, CPDs = list(),
-                              static_nodes = static_nodes,
-                              dynamic_nodes = dynamic_nodes) {
+learn_param_g_cpds = function(dbn, CPDs, static_nodes, dynamic_nodes) {
 
   nodes = c(static_nodes, dynamic_nodes)
   intercept_std = c(intercept_name, std_name)
@@ -362,18 +363,20 @@ replace_underscore_minus = function(name) {
 
 # given the data variable and parent set find the parameters of the linear reg.
 get_variable_model = function(data, variable, parents) {
+  bt <- function(x) paste0("`", x, "`")
   if (length(parents) == 0) {
-    formula <- as.formula(paste(variable, "~ 1"))
+    formula <- as.formula(paste(bt(variable), "~ 1"))
   } else {
-    formula <- reformulate(sapply(parents, replace_minus_unerscore),
-                           variable)
+    formula <- reformulate(sapply(parents, \(p) bt(p)),
+                           response = bt(variable))
   }
 
   # run linear regression model
   model = lm(formula = formula, data = data)
 
   coeff = model$coefficients
-  names(coeff) = sapply(names(coeff), replace_underscore_minus)
+  # removing the `` used to escape the - character
+  names(coeff) = sapply(names(coeff), \(name) gsub("`", "", name))
   std = sigma(model)
   return(
     list(
@@ -400,9 +403,27 @@ get_var_priors = function(markov_order, data) {
 }
 
 
-learn_param_g_data = function(dbn, data = data.frame(),
-                              static_nodes = static_nodes,
-                              dynamic_nodes = dynamic_nodes) {
+fit_nodes_gaussian <- function(nodes, data, dbn) {
+  nodes_info <- list()
+  for (variable in nodes) {
+    parents = get_parent_set(dbn, variable)
+    children = get_children_set(dbn, variable)
+    res = get_variable_model(data, variable, parents)
+
+    nodes_info[[variable]] = list(
+      node = variable,
+      parents = parents,
+      children = children,
+      regs = res$coeff,
+      std = res$std
+    )
+    class(nodes_info[[variable]]) = "dbn.fit.gnode"
+  }
+  nodes_info
+}
+
+
+learn_param_g_data = function(dbn, data, static_nodes, dynamic_nodes) {
 
   nodes_info = list()
 
@@ -421,38 +442,12 @@ learn_param_g_data = function(dbn, data = data.frame(),
   }
 
   # build transition dataframe A_t, ..., A_t-i
-  df_transition = build_shifted_df(data, markov_order = markov_order, separator = "_")
+  df_transition = build_shifted_df(data, markov_order = markov_order, separator = "-")
 
-  for(variable in static_nodes) {
-    parents = get_parent_set(dbn, variable)
-    children = get_children_set(dbn, variable)
-    res = get_variable_model(df_0, variable, parents)
-
-    nodes_info[[variable]] = list(
-      node = variable,
-      parents = parents,
-      children = children,
-      regs = res$coeff,
-      std = res$std
-    )
-    class(nodes_info[[variable]]) = "dbn.fit.gnode"
-  }
-
-  for(variable in dynamic_nodes) {
-    parents = get_parent_set(dbn, variable)
-    children = get_children_set(dbn, variable)
-    res = get_variable_model(df_transition, variable, parents)
-
-    nodes_info[[variable]] = list(
-      node = variable,
-      parents = parents,
-      children = children,
-      regs = res$coeff,
-      std = res$std
-    )
-    class(nodes_info[[variable]]) = "dbn.fit.gnode"
-  }
-
+  nodes_info <- c(
+    fit_nodes_gaussian(static_nodes, df_0, dbn),
+    fit_nodes_gaussian(dynamic_nodes, df_transition, dbn)
+  )
   class(nodes_info) = "dbn.fit"
   nodes_info
 }
@@ -460,8 +455,7 @@ learn_param_g_data = function(dbn, data = data.frame(),
 
 # ---- Mixed subroutines -------------------------------------------------
 
-get_node_info_mixed = function(dist, variable, parents, 
-                               children, defined_levels) {
+get_node_info_mixed = function(dist, variable, parents, children, defined_levels) {
   if(!is.array(dist$coef))
     stop(paste("ERROR: distribution of variable", variable,
                "attribute coef must be of class array"))
@@ -501,11 +495,15 @@ get_node_info_mixed = function(dist, variable, parents,
 
   d_levels = dimnames(coef)[2:length(dimnames(coef))]
   comb = (1:nrow(expand.grid(d_levels)))  
+  # comb = list(as.character(1:nrow(expand.grid(d_levels, stringsAsFactors = FALSE))))
 
   prob = array(c(coef), dim = c(dim(coef)[1], num_regs), dimnames = list(
     variable = dimnames(coef)[[1]],
     comb
   ))
+  # this sets dimnames(coef)[[1]] above with the name of the variable
+  names(dimnames(prob))[1] <- variable
+
   d_parents = match(names(d_levels), parents)
   g_parents = match(setdiff(dimnames(coef)[[1]], intercept_name), parents)
 
@@ -521,9 +519,7 @@ get_node_info_mixed = function(dist, variable, parents,
     ))
 }
 
-learn_param_mixed = function(dbn, distribution = list(),
-                             static_nodes = static_nodes,
-                             dynamic_nodes = dynamic_nodes) {
+learn_param_mixed_dist = function(dbn, distribution, static_nodes, dynamic_nodes) {
   
   is_clg      <- \(x) is.list(x) && !is.null(x$coef) && !is.null(x$sd)
   is_discrete <- is.array
@@ -581,6 +577,168 @@ learn_param_mixed = function(dbn, distribution = list(),
     }
   }
 
+  class(nodes_info) = "dbn.fit"
+  nodes_info
+}
+
+discrete_columns <- function(df) {
+  names(df)[sapply(df, \(x) is.factor(x) || is.character(x))]
+}
+
+get_node_distribution_mixed = function(data, variable, parents, children, lvs,
+                                       replace.unidentifiable){
+  # get names of discrete parents
+  discrete_parents = intersect(parents, names(lvs))
+
+  d_parents = match(discrete_parents, parents)
+  g_parents = match(setdiff(parents, discrete_parents), parents)
+  d_levels = lvs[discrete_parents]
+
+  combos = expand.grid(d_levels, stringsAsFactors = FALSE)
+
+  coef_list = vector("list", nrow(combos))
+  sd_vec = numeric(nrow(combos))
+
+  # this is so that each res$coef from regression is always in the same order
+  regression_names = c(intercept_name, parents[g_parents])
+
+  for(i in seq_len(nrow(combos))) {
+    mask = Reduce("&", lapply(names(combos),
+                               \(col) data[[col]] == combos[i, col]))
+    # no combination of discrete parents exist in df
+    if(sum(mask) == 0) {
+      if(replace.unidentifiable) {
+        warning(paste("WARNING: no data for discrete parent combination", i,
+                  "for variable", variable, "- using marginal model"))
+        coef_list[[i]] <- setNames(
+          c(mean(data[[variable]], na.rm = TRUE), rep(0, length(parents[g_parents]))),
+          regression_names
+        )
+        sd_vec[[i]] <- sd(data[[variable]], na.rm = TRUE)  
+      } else {
+        warning(paste("WARNING: variable", variable, "comination of discrete parents",
+                      "not in dataframe, replace.unidentifiable set to FALSE - setting to NA"))
+        coef_list[[i]] = setNames(rep(NA_real_, length(regression_names)), regression_names)
+        sd_vec[[i]] = NA_real_
+      }
+    } else {
+      res = get_variable_model(data[mask, ], variable, parents[g_parents])
+      coef_list[[i]] = res$coeff[regression_names]
+      sd_vec[[i]] = res$std
+    }
+  }
+
+  coef_array <- array(
+    unlist(coef_list),
+    dim = c(length(regression_names), prod(sapply(d_levels, length))),
+    dimnames = c(list(regression_names), list(as.character(1:nrow(combos))))
+  )
+  names(dimnames(coef_array))[1] <- variable
+
+  return(list(
+      node = variable,
+      parents = parents,
+      children = children,
+      coefficients = coef_array,
+      sd = sd_vec,
+      dlevels = d_levels,
+      dparents = d_parents,
+      gparents = g_parents
+    ))
+}
+
+
+fit_nodes_mixed <- function(nodes, data, dbn, lvs, replace.unidentifiable) {
+  nodes_info <- list()
+  for (variable in nodes) {
+    parents = get_parent_set(dbn, variable)
+    children = get_children_set(dbn, variable)
+
+    # discrete case
+    if(is.factor(data[[variable]]) || is.character(data[[variable]])) {
+      prob <- compute_cpt(data, variable, parents, lvs, replace.unidentifiable)
+      nodes_info[[variable]] <- list(
+        node     = variable,
+        parents  = parents,
+        children = children,
+        prob     = array(
+          prob,
+          dim      = unname(unlist(lapply(lvs[c(variable, parents)], length))),
+          dimnames = lvs[c(variable, parents)]
+        )
+      )
+      class(nodes_info[[variable]]) <- "dbn.fit.dnode"
+    } else if (is.numeric(data[[variable]])) {
+      # here need to check if variable is gaussian or conditional gaussian
+      # if all parents are gaussian -> variable is gaussian
+      if (all(sapply(parents, \(p) is.numeric(data[[p]])))) {
+        # gaussian
+        res = get_variable_model(data, variable, parents)
+        nodes_info[[variable]] = list(
+          node = variable,
+          parents = parents,
+          children = children,
+          regs = res$coeff,
+          std = res$std
+        )
+        class(nodes_info[[variable]]) = "dbn.fit.gnode"
+        # still check if some parents are discrete
+      } else if (any(sapply(parents, \(p) is.factor(data[[p]]) || 
+                                          is.character(data[[p]])))){
+        # conditional gaussian
+        nodes_info[[variable]] = get_node_distribution_mixed(data, variable,
+                                                             parents, children,
+                                                             lvs,
+                                                             replace.unidentifiable)
+        class(nodes_info[[variable]]) = "dbn.fit.cgnode"
+      } else # some error in parent type
+        stop(paste("ERROR: dbn.fit unrecognize data type in parents of variable", variable, 
+                   "variable is not gaussian nor conditional gaussian"))
+      
+    }
+  }
+  nodes_info
+}
+
+
+learn_param_data_mixed = function(dbn, data, static_nodes, dynamic_nodes, 
+                                  replace.unidentifiable) {
+  #
+  df_0 = data[data$Time == 0,]
+  names(df_0) = lapply(names(df_0), concat_name_post, postfix = "_0")
+
+  # if markov order > 1 compute values of p(A_t=lvls), ...
+  markov_order = dbn$markov_order
+  # if (markov_order > 1) {
+  #   priors <- list()
+  #   for (t in seq_len(markov_order - 1)) {
+  #     df_t <- data[data$Time == t, ]
+  #     for (var in vars) {
+  #       key <- paste0(var, "_", t)
+  #       counts   <- table(df_t[[var]])
+  #       priors[[key]] <- counts / sum(counts)
+  #     }
+  #   }
+  #   dbn_fitted[["priors"]] <- priors
+  # }
+
+  # build tr ansition dataframe A_t, ..., A_t-i
+  df_transition = build_shifted_df(data, markov_order = markov_order, separator = "-")
+
+  # build levels lookup for each node at _0, _t and _t-k
+
+  lvs = list()
+  for (var in discrete_columns(df_transition)) {
+    lvs[[var]] <- sort(as.array(levels(factor(df_transition[[var]]))))
+  }
+  for (var in discrete_columns(df_0)) {
+    lvs[[var]] <- sort(as.array(levels(factor(df_0[[var]]))))
+  }
+
+  nodes_info <- c(
+    fit_nodes_mixed(static_nodes, df_0, dbn, lvs, replace.unidentifiable),
+    fit_nodes_mixed(dynamic_nodes, df_transition, dbn, lvs, replace.unidentifiable)
+  )
   class(nodes_info) = "dbn.fit"
   nodes_info
 }

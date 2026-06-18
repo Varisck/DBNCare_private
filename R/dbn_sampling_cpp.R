@@ -41,6 +41,7 @@ plan_gaussian_node <- function(net, variable, var_index) {
     par_var[i] <- ref$var
     par_lag[i] <- ref$lag
   }
+
   list(var = var_index[[split_variable_name(variable)$name]],
        intercept = regs[1],
        std = as.numeric(node$std),
@@ -196,5 +197,5 @@ dbn.sampling <- function(fitted_dbn, n_samples, max_time) {
     ),
     columns
   )
-  data.frame(timeseries_dict)
+  data.frame(timeseries_dict, check.names = FALSE)
 }

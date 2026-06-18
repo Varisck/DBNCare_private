@@ -134,3 +134,61 @@ test_that("parameters re-learned from gaussian sample are close to truth", {
                  info = paste("std off for", variable))
   }
 })
+
+# ----- 3. variable name containing a hyphen ----------------------------------
+#
+# lm() formulas treat "-" as an operator. Parameter learning must backtick
+# variable names so that e.g. "A-B_0" is used literally and not parsed as
+# subtraction ("A minus B_0").
+#
+# Structure (markov_order = 1):
+#   A-B_t-1 -> A-B_t,  C_t-1 -> A-B_t
+#   C_t-1   -> C_t
+#   (no time-0 parents)
+
+build_hyphen_dbn <- function() {
+  d <- empty.dbn(dynamic_nodes = c("A-B", "C"), markov_order = 1)
+  d <- add.arc.dbn(d, from = c("A-B", "t-1"), to = c("A-B", "t"))
+  d <- add.arc.dbn(d, from = c("C",   "t-1"), to = c("A-B", "t"))
+  d <- add.arc.dbn(d, from = c("C",   "t-1"), to = c("C",   "t"))
+  d
+}
+
+build_hyphen_cpds <- function() {
+  list(
+    "A-B_0" = c("(Intercept)" = 1,   "Std (res)" = 0.5),
+    "C_0"   = c("(Intercept)" = 0,   "Std (res)" = 1),
+    "A-B_t" = c("(Intercept)" = 0.5, "A-B_t-1" = 0.8, "C_t-1" = -0.3, "Std (res)" = 0.4),
+    "C_t"   = c("(Intercept)" = 1,   "C_t-1"   = 0.5,                  "Std (res)" = 0.8)
+  )
+}
+
+set.seed(42)
+hyphen_data <- dbn.sampling(
+  dbn.fit(DBN = build_hyphen_dbn(), distribution = build_hyphen_cpds()),
+  n_samples = 500,
+  max_time  = 4
+)
+
+test_that("parameter learning from data works when a variable name contains a hyphen", {
+  dbn   <- build_hyphen_dbn()
+  cpds  <- build_hyphen_cpds()
+  refit <- dbn.fit(DBN = dbn, data = hyphen_data)
+
+  expect_equal(class(refit), "dbn.fit")
+  expect_equal(dbn_type(refit), "gaussian")
+  expect_setequal(names(refit), c("A-B_0", "C_0", "A-B_t", "C_t"))
+
+  for (variable in names(cpds)) {
+    cpd     <- cpds[[variable]]
+    regs_in <- cpd[seq_len(length(cpd) - 1)]
+    std_in  <- unname(cpd[length(cpd)])
+
+    expect_equal(unname(refit[[variable]]$regs), unname(regs_in),
+                 tolerance = 0.15,
+                 info = paste("regs off for", variable))
+    expect_equal(unname(refit[[variable]]$std), std_in,
+                 tolerance = 0.1,
+                 info = paste("std off for", variable))
+  }
+})

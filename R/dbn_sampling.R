@@ -290,7 +290,7 @@ dbn.sampling.R <- function(fitted_dbn, n_samples, max_time) {
         rep(paste("sample", observation, sep = ""), max_time)
       )
   }
-  df_timeseries <- data.frame(timeseries_dict)
+  df_timeseries <- data.frame(timeseries_dict, check.names = FALSE)
   return(df_timeseries)
 }
 
