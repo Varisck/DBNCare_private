@@ -28,7 +28,7 @@ get_dynamic_nodes = function(dbn) {
 #' @param distribution named list of per-node distributions. Each entry is one of:
 #'   a multi-dimensional array (CPT, discrete), a named numeric vector
 #'   (regression coefficients + std, gaussian), or a \code{list(coef, sd)} (CLG, mixed).
-#'   The type is detected automatically via \code{figure_out_distribution_type}.
+#'   The type is detected automatically by the function.
 #' @param data data.frame object
 #' @param replace.unidentifiable If TRUE conditional probabilities for unobserved
 #'   parents combinations (unidentifiable parameters) are replaced by uniform
@@ -64,6 +64,7 @@ dbn.fit <- function(DBN, distribution = NULL,
     stop("ERROR: only one of distribution or data must be provided to learn the parameters of the DBN")
 
   if (!is.null(distribution)) {
+    # this trows error if distribution is not recognized
     distribution_type = figure_out_distribution_type(distribution)
 
     if (distribution_type == 'discrete')
@@ -77,7 +78,9 @@ dbn.fit <- function(DBN, distribution = NULL,
                                 dynamic_nodes = dynamic_nodes))
 
     if (distribution_type == 'mixed')
-      stop("ERROR: mixed distributions are not supported yet")
+      return(learn_param_mixed(DBN, distribution = distribution,
+                               static_nodes = static_nodes,
+                               dynamic_nodes = dynamic_nodes))
   }
 
   # only data was provided: dispatch on dataset_type
@@ -121,7 +124,8 @@ figure_out_distribution_type = function(dist) {
 # ---- discrete subroutines -------------------------------------------------
 
 compute_cpt = function(data, variable, parents, lvs, replace.unidentifiable) {
-  pr <-
+  if(length(parents) > 0){
+    pr <-
     data[, c(rev(parents), variable)] %>% 
     dplyr::group_by_all() %>% 
     dplyr::count() %>% 
@@ -139,7 +143,11 @@ compute_cpt = function(data, variable, parents, lvs, replace.unidentifiable) {
         warning("WARNING: Probabilities of the conditioning set equal to 0: Relative frequency is NA")
       }
     }
-  pr
+    return(pr$prob)
+  } else {
+    return(unlist(lapply(lvs[[variable]], \(x)
+        nrow(data[data[, variable] == x, ]) / nrow(data))))
+  }  
 }
 
 fit_nodes_discrete <- function(nodes, data, dbn, lvs, replace.unidentifiable) {
@@ -147,13 +155,7 @@ fit_nodes_discrete <- function(nodes, data, dbn, lvs, replace.unidentifiable) {
   for (variable in nodes) {
     parents  <- get_parent_set(dbn, variable)
     children <- get_children_set(dbn, variable)
-    if (length(parents) > 0) {
-      prob <- compute_cpt(data, variable, parents, lvs, replace.unidentifiable)$prob
-    } else {
-      # counting occurrences of the variable no parents
-      prob <- unlist(lapply(lvs[[variable]], \(x)
-        nrow(data[data[, variable] == x, ]) / nrow(data)))
-    }
+    prob <- compute_cpt(data, variable, parents, lvs, replace.unidentifiable)
     fitted[[variable]] <- list(
       node     = variable,
       parents  = parents,
@@ -164,6 +166,7 @@ fit_nodes_discrete <- function(nodes, data, dbn, lvs, replace.unidentifiable) {
         dimnames = lvs[c(variable, parents)]
       )
     )
+    class(fitted[[variable]]) <- "dbn.fit.dnode"
   }
   fitted
 }
@@ -214,6 +217,31 @@ learn_param_d_data = function(dbn, data,
   dbn_fitted
 }
 
+# checks the necessary CPT errors and returns the node_info object
+get_node_info_discrete = function(CPT, variable, parents, children, defined_levels) {
+  # check dimentions against parent set
+  if (!setequal(setdiff(names(dimnames(CPT)), variable), parents))
+    stop("ERROR: CPTs do not match parents set")
+
+  # checking parent levels metch stored levels of variable
+  if(length(dimnames(CPT)) > 1){ 
+    dim_names = dimnames(CPT)[2:length(dimnames(CPT))]
+    for (parent in names(dim_names)) {
+      parent_name = get_variable_name(parent)
+      if (!(setequal(dim_names[[parent]], defined_levels[[parent_name]])))
+        stop(paste("ERROR: Inconsistency in node's levels for variable",
+                variable, "expected", toString(defined_levels[[parent_name]]),
+                "for parent", parent_name, "got", toString(dim_names[[parent]])))
+    }
+  }
+
+  return(list(
+      node = variable,
+      parents = parents,
+      children = children,
+      prob = aperm(CPT, c(variable, parents))
+    ))
+}
 
 learn_param_d_cpts = function(dbn, CPTs,
                               static_nodes,
@@ -246,33 +274,12 @@ learn_param_d_cpts = function(dbn, CPTs,
     parents = get_parent_set(dbn, variable)
     children = get_children_set(dbn, variable)
 
-    # check dimentions against parent set
-    if (!setequal(setdiff(names(dimnames(CPT)), variable), parents))
-      stop("ERROR: CPTs do not match parents set")
-
-    # add levels of this variable to levels stored
     var_name = get_variable_name(variable)
     defined_levels[[var_name]] = dimnames(CPT)[[variable]]
-    
-    # checking parent levels metch stored levels of variable
-    if(length(dimnames(CPT)) > 1){ 
-      dim_names = dimnames(CPT)[2:length(dimnames(CPT))]
-      for (parent in names(dim_names)) {
-        parent_name = get_variable_name(parent)
-        if (!(setequal(dim_names[[parent]], defined_levels[[parent_name]])))
-          stop(paste("ERROR: Inconsistency in node's levels for variable", 
-                  variable, "expected", defined_levels[[parent_name]], 
-                  "for parent", parent_name, "got", dim_names[[parent]]))
-      }
-    }
-    
-    nodes_info[[variable]] <-
-      list(
-        node = variable,
-        parents = parents,
-        children = children,
-        prob = aperm(CPT, c(variable, parents))
-      )
+
+    nodes_info[[variable]] = get_node_info_discrete(CPT, variable, parents,
+                                                    children, defined_levels)
+    class(nodes_info[[variable]]) = "dbn.fit.dnode"
   }
 
   class(nodes_info) <- "dbn.fit"
@@ -281,6 +288,41 @@ learn_param_d_cpts = function(dbn, CPTs,
 
 
 # ---- gaussian subroutines -------------------------------------------------
+
+get_node_info_gaussian = function(cpd, variable, parents, children) {
+    if (is.list(cpd)) 
+      stop(paste("ERROR: CPD must be a numeric vector found", toString(class(cpd))))
+
+    # check values in CPD are numeric
+    if(!(all(lapply(cpd, class) == 'numeric')))
+      stop("ERROR: Probabilities must be numeric")
+
+    # check CPD is parents + intercept + std
+    if(length(cpd) != (length(parents) + 2))
+      stop(paste("ERROR: Variable", variable, ".Expected CPD of length",
+                 length(parents) + 2, "got ", length(cpd)))
+
+    # check that CPD names are ordered same as parents
+    if (!identical(names(cpd)[seq_along(parents) + 1], parents)) {
+      stop(paste("ERROR: Variable", variable,
+                 "regressors have to be ordered according to parents!"))
+    }
+
+    # check first and last elements are intercept and std
+    if(names(cpd)[1] != intercept_name |
+       names(cpd)[length(cpd)] != std_name)
+      stop(paste("ERROR: Variable", variable,
+                 "first and last values of parameters must be",
+                 intercept_name, "and", std_name))
+
+    return(list(
+      node = variable,
+      parents = parents,
+      children = children,
+      regs = cpd[1:length(cpd) - 1],
+      std = cpd[length(cpd)]
+    ))
+}
 
 learn_param_g_cpds = function(dbn, CPDs = list(),
                               static_nodes = static_nodes,
@@ -302,43 +344,12 @@ learn_param_g_cpds = function(dbn, CPDs = list(),
 
     cpd = CPDs[[variable]]
 
-    # check values in CPD are numeric
-    if(!(all(lapply(cpd, class) == 'numeric')))
-      stop("ERROR: Probabilities must be numeric")
-
-    # need do check cpd is not list!
-
-    # check CPD is parents + intercept + std
-    if(length(cpd) != (length(parents) + 2))
-      stop(paste("ERROR: Variable", variable, ".Expected CPD of length",
-                 length(parents) + 2, "got ", length(cpd)))
-
-    # check that CPD names are ordered same as parents
-    if (!identical(names(cpd)[seq_along(parents) + 1], parents)) {
-      stop(paste("ERROR: Variable", variable,
-                 "regressors have to be ordered according to parents!"))
-    }
-
-    # check first and last elements are intercept and std
-    if(names(cpd)[1] != intercept_name |
-       names(cpd)[length(cpd)] != std_name)
-      stop(paste("ERROR: Variable", variable,
-                 "first and last values of parameters must be",
-                 intercept_name, "and", std_name))
-
-    nodes_info[[variable]] = list(
-      node = variable,
-      parents = parents,
-      children = children,
-      regs = cpd[1:length(cpd) - 1],
-      std = cpd[length(cpd)]
-    )
-
+    nodes_info[[variable]] = get_node_info_gaussian(cpd, variable, parents, children)
+    class(nodes_info[[variable]]) = "dbn.fit.gnode"
   }
 
   class(nodes_info) = "dbn.fit"
   nodes_info
-
 }
 
 replace_minus_unerscore = function(name) {
@@ -424,6 +435,7 @@ learn_param_g_data = function(dbn, data = data.frame(),
       regs = res$coeff,
       std = res$std
     )
+    class(nodes_info[[variable]]) = "dbn.fit.gnode"
   }
 
   for(variable in dynamic_nodes) {
@@ -438,6 +450,7 @@ learn_param_g_data = function(dbn, data = data.frame(),
       regs = res$coeff,
       std = res$std
     )
+    class(nodes_info[[variable]]) = "dbn.fit.gnode"
   }
 
   class(nodes_info) = "dbn.fit"
@@ -447,7 +460,130 @@ learn_param_g_data = function(dbn, data = data.frame(),
 
 # ---- Mixed subroutines -------------------------------------------------
 
+get_node_info_mixed = function(dist, variable, parents, 
+                               children, defined_levels) {
+  if(!is.array(dist$coef))
+    stop(paste("ERROR: distribution of variable", variable,
+               "attribute coef must be of class array"))
+  if(!is.numeric(dist$sd))
+    stop(paste("ERROR: distribution of variable", variable,
+               "attribute sd must be of of class numeric"))
 
+  coef = dist$coef
+
+  if (!identical(unname(sapply(dimnames(coef), length)), dim(coef)))
+    stop(paste("ERROR: distribution of variable", variable,
+                "discrete parents levels size is mismatched"))
+
+  add_parents = c()
+  if(length(dimnames(coef)) > 1) {
+    add_parents = setdiff(dimnames(coef)[[1]], intercept_name)
+    # checking levels for discrete parents match the defined ones
+    dim_names = dimnames(coef)[2:length(dimnames(coef))]
+    for (parent in names(dim_names)) {
+      parent_name = get_variable_name(parent)
+      if (!(setequal(dim_names[[parent]], defined_levels[[parent_name]])))
+        stop(paste("ERROR: Inconsistency in node's levels for variable",
+                variable, "expected", toString(defined_levels[[parent_name]]),
+                "for parent", parent_name, "got", toString(dim_names[[parent]])))
+    }
+  }
+  
+  if(!setequal(setdiff(union(names(dimnames(coef)), add_parents), variable), parents))
+    stop(paste("ERROR: distribution of variable", variable, "do not match parent set"))
+
+  if(length(dim(coef)) > 1) {
+    num_regs = prod(dim(coef)[2:length(dim(coef))])
+    if(length(dist$sd) != num_regs)
+      stop(paste("ERROR: distribution of variable", variable, "number of regressions and",
+                 "number of sd do not match:", num_regs, "against", length(dist$sd)))
+  }
+
+  d_levels = dimnames(coef)[2:length(dimnames(coef))]
+  comb = (1:nrow(expand.grid(d_levels)))  
+
+  prob = array(c(coef), dim = c(dim(coef)[1], num_regs), dimnames = list(
+    variable = dimnames(coef)[[1]],
+    comb
+  ))
+  d_parents = match(names(d_levels), parents)
+  g_parents = match(setdiff(dimnames(coef)[[1]], intercept_name), parents)
+
+  return(list(
+      node = variable,
+      parents = parents,
+      children = children,
+      coefficients = prob,
+      sd = dist$sd,
+      dlevels = d_levels,
+      dparents = d_parents,
+      gparents = g_parents
+    ))
+}
+
+learn_param_mixed = function(dbn, distribution = list(),
+                             static_nodes = static_nodes,
+                             dynamic_nodes = dynamic_nodes) {
+  
+  is_clg      <- \(x) is.list(x) && !is.null(x$coef) && !is.null(x$sd)
+  is_discrete <- is.array
+  is_gaussian <- \(x) is.numeric(x) && is.vector(x)
+
+  nodes = c(static_nodes, dynamic_nodes)
+  intercept_std = c(intercept_name, std_name)
+
+  defined_levels = list()
+  nodes_info = list()
+
+  # check that distribution contains distributions for each node in the net
+  if (!setequal(names(distribution), nodes))
+    stop("ERROR: nodes in DBN and variables in distribution do not match")
+
+  # parents may be lagged "D_t-1", map each base variable name to its
+  # distribution to look up parent types regardless of slice.
+  dist_by_var = list()
+  for (n in names(distribution))
+    dist_by_var[[get_variable_name(n)]] = distribution[[n]]
+
+  for(variable in names(distribution)) {
+
+    parents = get_parent_set(dbn, variable)
+    children = get_children_set(dbn, variable)
+
+    dist = distribution[[variable]]
+
+    if (is_discrete(dist)) {
+      # discrete can only have discrete parents
+      parent_dists = lapply(parents, \(p) dist_by_var[[get_variable_name(p)]])
+      if (!all(sapply(parent_dists, is_discrete)))
+        stop(paste("ERROR: found discrete variable", variable,
+                   "with non discrete parents"))
+      # update levels map and get node_info
+      var_name = get_variable_name(variable)
+      defined_levels[[var_name]] = dimnames(dist)[[variable]]
+      nodes_info[[variable]] = get_node_info_discrete(dist, variable, parents,
+                                                      children, defined_levels)
+      class(nodes_info[[variable]]) = "dbn.fit.dnode"
+    } else if(is_gaussian(dist)) {
+      nodes_info[[variable]] = get_node_info_gaussian(dist, variable, 
+                                                      parents, children)
+      class(nodes_info[[variable]]) = "dbn.fit.gnode"
+
+    } else if(is_clg(dist)) {
+      nodes_info[[variable]] = get_node_info_mixed(dist, variable, parents,
+                                                   children, defined_levels)
+      class(nodes_info[[variable]]) = "dbn.fit.cgnode"
+    } else {
+      stop(paste("ERROR: found unrecognized node type in distribution for variable", variable, "please use:",
+                  "\n1) a multi-dimensional array (CPT, discrete)",
+                  "\n2) a named numeric vector (regression coefficients + std, gaussian)",
+                  "\n3) a list(coef, sd) (CLG, mixed)"))
+    }
+  }
+
+  class(nodes_info) = "dbn.fit"
+  nodes_info
+}
 
 
 stuff = function() {
@@ -460,6 +596,10 @@ stuff = function() {
                       A_t = c(intercept_name, "A_t-1", "C_t"),
                       D_t = c("yes", "no"),
                       B_t = c("yes", "no")
+                     ))
+
+  test = array(c(1, 0.2, 0.3), dim = 3, dimnames = list(
+                      A_t = c(intercept_name, "A_t-1", "C_t")
                      ))
 
   expand.grid(dimnames(A_t.prob)[2:3])

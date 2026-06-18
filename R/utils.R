@@ -370,21 +370,15 @@ dbn_type = function(dbn) {
 
   nodes = names(dbn)[grepl("_t$", names(dbn))]
 
-  discrete = all(sapply(nodes, \(n) {
-    !is.null(dbn[[n]]$prob)
-  }))
+  discrete = sapply(nodes, \(n) !is.null(dbn[[n]]$prob))
+  gaussian = sapply(nodes, \(n) !is.null(dbn[[n]]$regs))
+  mixed = sapply(nodes, \(n) !is.null(dbn[[n]]$coefficients))
 
   if(all(discrete)) return("discrete")
-
-  gaussian = all(sapply(nodes, \(n) {
-    !is.null(dbn[[n]]$regs)
-  }))
-
   if(all(gaussian)) return("gaussian")
+  if(any(mixed)) return("mixed")
 
-  if(any(discrete) && any(gaussian)) return("mixed")
-
-  stop("dbn_type dbn not recognized as neither discrete, gaussian nor mixed")
+  stop("ERROR: dbn_type not recognized!")
 }
 
 
