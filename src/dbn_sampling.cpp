@@ -197,8 +197,9 @@ int sample_one(std::vector<double>& prob, std::vector<int>& payload) {
 // Sample one value of `node` at time t: collect the CPT rows compatible with
 // the values of the available parents (filter_cpt()), then draw the node's
 // level with probability proportional to Freq (sample_variable_discrete()).
-int sample_disc_value(const DiscNode& node, const IntegerMatrix& codes,
-                      R_xlen_t block, int t, std::vector<double>& prob_buf,
+template <typename Matrix>
+int sample_disc_value(const DiscNode& node, const Matrix& codes, R_xlen_t block,
+                      int t, std::vector<double>& prob_buf,
                       std::vector<int>& code_buf) {
   const int npar = static_cast<int>(node.par_var.size());
   const int n_own = node.dims[0];
@@ -343,4 +344,218 @@ IntegerMatrix dbn_sample_discrete_cpp(int n_samples, int max_time, int n_vars,
             sample_disc_value(node, codes, block, t, prob_buf, code_buf);
   }
   return codes;
+}
+
+struct MixNode {
+  int var;                        // column written by this node (continuous)
+  std::vector<double> intercept;  // one per discrete-parent combination
+  std::vector<double> std;        // residual sd, one per combination
+  std::vector<int> cont_par_var;  // continuous parent columns
+  std::vector<int> cont_par_lag;  // continuous parent lags (0 = same slice)
+  std::vector<std::vector<double>> par_coef;  // [combination][cont parent]
+
+  std::vector<int> disc_dims;     // level count of each discrete parent
+  std::vector<int> disc_par_var;  // discrete parent columns, coef-dim order
+  std::vector<int> disc_par_lag;
+  std::vector<std::vector<int>> par_code;  // coef dim index -> canonical code
+  std::vector<std::vector<int>> par_inv;   // canonical code -> coef dim index
+  R_xlen_t n_combos;                       // prod(disc_dims), 1 if no disc par
+};
+
+std::vector<MixNode> parse_mixed_plan(const List& plan, int n_vars,
+                                      const IntegerVector& n_levels) {
+  std::vector<MixNode> nodes;
+  nodes.reserve(plan.size());
+
+  for (R_xlen_t k = 0; k < plan.size(); ++k) {
+    List spec = plan[k];
+    MixNode node;
+
+    node.var = as<int>(spec["var"]);
+    node.intercept = as<std::vector<double>>(spec["intercept"]);
+    node.std = as<std::vector<double>>(spec["std"]);
+
+    node.cont_par_var = as<std::vector<int>>(spec["cont_par_var"]);
+    node.cont_par_lag = as<std::vector<int>>(spec["cont_par_lag"]);
+
+    node.disc_dims = as<std::vector<int>>(spec["disc_dims"]);
+    node.disc_par_var = as<std::vector<int>>(spec["disc_par_var"]);
+    node.disc_par_lag = as<std::vector<int>>(spec["disc_par_lag"]);
+
+    List par_coef = spec["par_coef"];
+    List disc_par_map = spec["disc_par_map"];
+
+    if (node.var < 0 || node.var >= n_vars ||
+        node.cont_par_var.size() != node.cont_par_lag.size() ||
+        node.disc_par_var.size() != node.disc_par_lag.size() ||
+        node.disc_par_var.size() != node.disc_dims.size() ||
+        static_cast<size_t>(disc_par_map.size()) != node.disc_par_var.size())
+      stop("dbn.sampling.cpp: malformed mixed sampling plan");
+
+    // number of discrete-parent combinations: the size of the coef tables
+    node.n_combos = 1;
+    for (int d : node.disc_dims) {
+      if (d <= 0) stop("dbn.sampling.cpp: malformed mixed sampling plan");
+      node.n_combos *= d;
+    }
+    if (static_cast<R_xlen_t>(node.intercept.size()) != node.n_combos ||
+        static_cast<R_xlen_t>(node.std.size()) != node.n_combos ||
+        static_cast<R_xlen_t>(par_coef.size()) != node.n_combos)
+      stop("dbn.sampling.cpp: malformed mixed sampling plan");
+
+    // continuous parents: bounds + one coefficient vector per combination
+    for (size_t j = 0; j < node.cont_par_var.size(); ++j)
+      if (node.cont_par_var[j] < 0 || node.cont_par_var[j] >= n_vars ||
+          node.cont_par_lag[j] < 0)
+        stop("dbn.sampling.cpp: malformed mixed sampling plan");
+
+    node.par_coef.resize(node.n_combos);
+    for (R_xlen_t c = 0; c < node.n_combos; ++c) {
+      node.par_coef[c] = as<std::vector<double>>(par_coef[c]);
+      if (node.par_coef[c].size() != node.cont_par_var.size())
+        stop("dbn.sampling.cpp: malformed mixed sampling plan");
+    }
+
+    // discrete parents: invert the label translation, same as parse_disc_plan
+    node.par_code.resize(node.disc_par_var.size());
+    node.par_inv.resize(node.disc_par_var.size());
+    for (size_t j = 0; j < node.disc_par_var.size(); ++j) {
+      if (node.disc_par_var[j] < 0 || node.disc_par_var[j] >= n_vars ||
+          node.disc_par_lag[j] < 0)
+        stop("dbn.sampling.cpp: malformed mixed sampling plan");
+
+      node.par_code[j] = as<std::vector<int>>(disc_par_map[j]);
+      if (static_cast<int>(node.par_code[j].size()) != node.disc_dims[j])
+        stop("dbn.sampling.cpp: malformed mixed sampling plan");
+
+      node.par_inv[j].assign(n_levels[node.disc_par_var[j]], -1);
+      for (size_t i = 0; i < node.par_code[j].size(); ++i) {
+        const int code = node.par_code[j][i];
+        if (code >= 0 && code < static_cast<int>(node.par_inv[j].size()))
+          node.par_inv[j][code] = static_cast<int>(i);
+      }
+    }
+
+    nodes.push_back(std::move(node));
+  }
+  return nodes;
+}
+
+// Sample one value of a CLG node at time t from the single value matrix
+double sample_mixed_value(const MixNode& node, const NumericMatrix& values,
+                          R_xlen_t block, int t) {
+  R_xlen_t combo = 0;
+  R_xlen_t mult = 1;
+  for (size_t j = 0; j < node.disc_par_var.size(); ++j) {
+    const int tp = t - node.disc_par_lag[j];
+    int idx;
+    if (tp < 0) {
+      // if discrete parent not in time series < markov order
+      // sample a discrete parent of the cg at random
+      idx = static_cast<int>(unif_rand() * node.disc_dims[j]);
+      if (idx >= node.disc_dims[j]) idx = node.disc_dims[j] - 1;
+    } else {
+      const int code = values(block + tp, node.disc_par_var[j]);
+      idx = (code >= 0 && code < static_cast<int>(node.par_inv[j].size()))
+                ? node.par_inv[j][code]
+                : -1;
+    }
+    if (idx < 0)
+      stop("dbn.sampling.cpp: mixed node parent value not among CLG levels");
+    combo += mult * idx;
+    mult *= node.disc_dims[j];
+  }
+
+  long double acc = node.intercept[combo];  // first product: 1 * intercept
+  const std::vector<double>& coef = node.par_coef[combo];
+  for (size_t j = 0; j < node.cont_par_var.size(); ++j) {
+    const int tp = t - node.cont_par_lag[j];
+    // if tp < 0 it does not exist the value in the time series ignore regressor
+    if (tp >= 0)
+      acc += static_cast<double>(values(block + tp, node.cont_par_var[j]) *
+                                 coef[j]);
+  }
+  return static_cast<double>(acc) + R::rnorm(0.0, node.std[combo]);
+}
+
+// Sampling core for mixed (conditional-gaussian) DBNs
+// [[Rcpp::export]]
+NumericMatrix dbn_sample_mixed_cpp(int n_samples, int max_time, List n_vars,
+                                   IntegerVector n_levels, List plan_0,
+                                   List plan_t, List node_ordering_0,
+                                   List node_ordering_t) {
+  const int n_total = as<int>(n_vars["discrete"]) +
+                      as<int>(n_vars["gaussian"]) + as<int>(n_vars["mixed"]);
+  if (n_levels.size() != n_total)
+    stop("dbn.sampling.cpp: malformed mixed sampling plan");
+
+  const std::vector<DiscNode> disc_nodes_0 =
+      parse_disc_plan(plan_0["discrete"], n_total, n_levels);
+  const std::vector<DiscNode> disc_nodes_t =
+      parse_disc_plan(plan_t["discrete"], n_total, n_levels);
+  const std::vector<GaussNode> gauss_nodes_0 =
+      parse_gauss_plan(plan_0["gaussian"], n_total);
+  const std::vector<GaussNode> gauss_nodes_t =
+      parse_gauss_plan(plan_t["gaussian"], n_total);
+  const std::vector<MixNode> mix_nodes_0 =
+      parse_mixed_plan(plan_0["mixed"], n_total, n_levels);
+  const std::vector<MixNode> mix_nodes_t =
+      parse_mixed_plan(plan_t["mixed"], n_total, n_levels);
+
+  const IntegerVector order_type_0 = node_ordering_0["vector_type"];
+  const IntegerVector order_idx_0 = node_ordering_0["index_vec"];
+  const IntegerVector order_type_t = node_ordering_t["vector_type"];
+  const IntegerVector order_idx_t = node_ordering_t["index_vec"];
+  if (order_type_0.size() != order_idx_0.size() ||
+      order_type_t.size() != order_idx_t.size())
+    stop("dbn.sampling.cpp: malformed mixed node ordering");
+
+  const int block_len = max_time + 1;
+  check_matrix_size(static_cast<double>(n_samples) * block_len);
+  NumericMatrix values(n_samples * block_len, n_total);
+
+  std::vector<double> prob_buf;
+  std::vector<int> code_buf;
+
+  // sample every node of one time slice in topological order
+  auto run_slice = [&](const IntegerVector& type, const IntegerVector& idx,
+                       R_xlen_t block, int t, const std::vector<DiscNode>& dn,
+                       const std::vector<GaussNode>& gn,
+                       const std::vector<MixNode>& mn) {
+    for (int k = 0; k < type.size(); ++k) {
+      const int i = idx[k];
+      switch (type[k]) {
+        case 0:  // discrete
+          if (i < 0 || static_cast<size_t>(i) >= dn.size())
+            stop("dbn.sampling.cpp: mixed node ordering index out of range");
+          values(block + t, dn[i].var) =
+              sample_disc_value(dn[i], values, block, t, prob_buf, code_buf);
+          break;
+        case 1:  // gaussian
+          if (i < 0 || static_cast<size_t>(i) >= gn.size())
+            stop("dbn.sampling.cpp: mixed node ordering index out of range");
+          values(block + t, gn[i].var) =
+              gauss_mean(gn[i], values, block, t) + R::rnorm(0.0, gn[i].std);
+          break;
+        case 2:  // mixed / CLG
+          if (i < 0 || static_cast<size_t>(i) >= mn.size())
+            stop("dbn.sampling.cpp: mixed node ordering index out of range");
+          values(block + t, mn[i].var) =
+              sample_mixed_value(mn[i], values, block, t);
+          break;
+        default:
+          stop("dbn.sampling.cpp: unknown node type in mixed ordering");
+      }
+    }
+  };
+
+  for (int obs = 0; obs < n_samples; ++obs) {
+    const R_xlen_t block = static_cast<R_xlen_t>(obs) * block_len;
+    run_slice(order_type_0, order_idx_0, block, 0, disc_nodes_0, gauss_nodes_0,
+              mix_nodes_0);
+    for (int t = 1; t <= max_time; ++t)
+      run_slice(order_type_t, order_idx_t, block, t, disc_nodes_t,
+                gauss_nodes_t, mix_nodes_t);
+  }
+  return values;
 }

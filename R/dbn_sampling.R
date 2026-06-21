@@ -199,7 +199,7 @@ dbn.sampling.R <- function(fitted_dbn, n_samples, max_time) {
   if (n_samples < 1){
     stop("N_samples must be greater than 0!")
   }
-  if (class(fitted_dbn) != "dbn.fit") {
+  if (!is.dbn.fit(fitted_dbn)) {
     stop("fitted_DBN must be a dbn.fit object")
   }
 
@@ -315,7 +315,7 @@ dbn.forecasting <- function(dbn, observations, timepoints) {
     stop("timepoints must be greater than 0!")
   }
   #check that observation is a list
-  if (class(dbn) != "dbn.fit") {
+  if (!is.dbn.fit(dbn)) {
     stop("fitted_DBN must be a dbn.fit object")
   }
 

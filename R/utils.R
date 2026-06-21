@@ -7,6 +7,15 @@ std_name = "Std (res)"
 
 
 # -------------------------------
+#        Class predicates
+# -------------------------------
+
+is.dbn     <- function(x) inherits(x, "dbn")
+is.dbn.fit <- function(x) inherits(x, "dbn.fit")
+is.bn.fit  <- function(x) inherits(x, "bn.fit")
+is.bn      <- function(x) inherits(x, "bn")
+
+# -------------------------------
 #           Functions
 # -------------------------------
 
@@ -57,7 +66,7 @@ rename_nodes_unroll <- function(time_slice, nodes_names) {
 #' @export
 #'
 get_node_edges <- function(dbn_transition, node, time_slice) {
-  if (class(dbn_transition) != "bn.fit") {
+  if (!is.bn.fit(dbn_transition)) {
     stop("dbn must be a bn.fit object!")
   }
   if (is.character(node) == FALSE) {
@@ -102,7 +111,7 @@ get_unrolled_dbn <- function(dbn_fitted, slices) {
   if (slices < 1){
     stop("slices must be greater than 0!")
   }
-  if (class(dbn_fitted) != "dbn.fit") {
+  if (!is.dbn.fit(dbn_fitted)) {
     stop("dbn_fitted must be a dbn.fit object")
   }
   nodes_bn <- c()
@@ -256,14 +265,13 @@ get_variable_time <- function(n) {
 #' @examples
 #' get_parent_set(G, "A_t")
 get_parent_set = function(dbn, variable) {
-  if(class(dbn) == "dbn") {
+  if(is.dbn(dbn)) {
     split = split_variable_name(variable)
     name = split$name
     time = split$time
-    
+
     dbn$nodes[[name]][[time]]$parents
-  } else if(class(dbn) == "dbn.fit" | 
-            class(dbn) == "bn.fit")
+  } else if(is.dbn.fit(dbn) | is.bn.fit(dbn))
     dbn[[variable]]$parents
   else
     stop(paste("Get_parent_set dbn class not recognized, got",
@@ -281,17 +289,16 @@ get_parent_set = function(dbn, variable) {
 #' @examples
 #' get_children_set(G, "A_t")
 get_children_set = function(dbn, variable) {
-  if(class(dbn) == "dbn") {
+  if(is.dbn(dbn)) {
     split = split_variable_name(variable)
     name = split$name
     time = split$time
-    
+
     dbn$nodes[[name]][[time]]$children
-  } else if(class(dbn) == "dbn.fit" | 
-            class(dbn) == "bn.fit")
+  } else if(is.dbn.fit(dbn) | is.bn.fit(dbn))
     dbn[[variable]]$children
   else
-    stop(paste("Get_parent_set dbn class not recognized, got",
+    stop(paste("Get_children_set dbn class not recognized, got",
                class(dbn)))
 }
 
@@ -305,7 +312,7 @@ get_children_set = function(dbn, variable) {
 #' @examples
 #' get_nodes_t(G_transition)
 get_nodes_t <- function(G_transition) {
-  if (class(G_transition) != "bn.fit") {
+  if (!is.bn.fit(G_transition)) {
     stop("G_transition must be a bn.fit object!")
   }
   nodes_dbn <- bnlearn::node.ordering(G_transition)
@@ -330,7 +337,7 @@ get_nodes_t <- function(G_transition) {
 #' @examples
 #' mo <- get_max_mo_dbn_fit(fit)
 get_max_mo_dbn_fit = function(dbn) {
-  if(class(dbn) != "dbn.fit")
+  if(!is.dbn.fit(dbn))
     stop("get_max_mo_dbn_fit input object is not a dbn.fit")
   nodes_t = get_nodes_t(remove_prev_time_from_bn_fit(dbn))
   mx = 0
@@ -364,7 +371,7 @@ get_max_mo_dbn_fit = function(dbn) {
 #' @examples
 #' type <- dbn_type(dbn)
 dbn_type = function(dbn) {
-  if(class(dbn) != "dbn.fit") {
+  if(!is.dbn.fit(dbn)) {
     stop("dbn_type input dbn must be object of class dbn.fit")
   }
 

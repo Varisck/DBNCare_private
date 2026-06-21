@@ -9,3 +9,7 @@ dbn_sample_discrete_cpp <- function(n_samples, max_time, n_vars, n_levels, plan_
     .Call(`_DynamicBayesianNetwork_dbn_sample_discrete_cpp`, n_samples, max_time, n_vars, n_levels, plan_0, plan_t)
 }
 
+dbn_sample_mixed_cpp <- function(n_samples, max_time, n_vars, n_levels, plan_0, plan_t, node_ordering_0, node_ordering_t) {
+    .Call(`_DynamicBayesianNetwork_dbn_sample_mixed_cpp`, n_samples, max_time, n_vars, n_levels, plan_0, plan_t, node_ordering_0, node_ordering_t)
+}
+

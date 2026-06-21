@@ -45,7 +45,7 @@ remove_suffix_t <- function(node_name) {
 #' levels in the second
 #' @export
 node_levels <- function(net, order, lvl = 1, acc = NULL){
-  if(class(net)!="dbn"){
+  if(!is.dbn(net)){
     stop("net must be of class DBN")
   }
   ret <- acc
@@ -80,7 +80,7 @@ node_levels <- function(net, order, lvl = 1, acc = NULL){
 #' level in the second
 #' @export
 node_levels_g_0 <- function(net, order, lvl = 1, acc = NULL){
-  if(class(net)!="bn"){
+  if(!is.bn(net)){
     stop("net must be of class bn")
   }
   ret <- acc
@@ -102,7 +102,7 @@ node_levels_g_0 <- function(net, order, lvl = 1, acc = NULL){
 #' @export
 #'
 plot_g0 <- function(dbn){
-  if(class(dbn)!="dbn"){
+  if(!is.dbn(dbn)){
     stop("dbn must be of class DBN")
   }
   g_0 <- from_DBN_to_G_0(dbn)
@@ -196,7 +196,7 @@ select_nodes_names_with_t_minus_n <- function(nodes_list, n) {
 #' 
 #' @export
 dynamic_ordering <- function(dbn){
-  if(class(dbn)!="dbn"){
+  if(!is.dbn(dbn)){
     stop("dbn must be of class DBN")
   }
   g_transition <- from_DBN_to_G_transition(dbn)
@@ -212,7 +212,7 @@ dynamic_ordering <- function(dbn){
 #' @export
 #'
 plot_g_transition <- function(dbn){
-  if(class(dbn)!="dbn"){
+  if(!is.dbn(dbn)){
     stop("dbn must be of class DBN")
   }
   g_transition <- from_DBN_to_G_transition(dbn)

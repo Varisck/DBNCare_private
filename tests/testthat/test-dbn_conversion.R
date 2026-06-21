@@ -36,8 +36,16 @@ test_that("get.g0.net(DBN) returns a bn with correct nodes and arc", {
 
 test_that("get.g0.net(dbn.fit) returns a bn.fit with correct nodes", {
   g0 <- get.g0.net(build_conv_dbn_fit())
-  expect_equal(class(g0), "bn.fit")
+  expect_true(inherits(g0, "bn.fit"))
   expect_setequal(names(g0), c("A_0", "B_0"))
+})
+
+test_that("get.g0.net(dbn.fit) has correct network and node classes for a discrete DBN", {
+  g0 <- get.g0.net(build_conv_dbn_fit())
+  expect_equal(class(g0), c("bn.fit", "bn.fit.dnet"))
+  for (nm in names(g0))
+    expect_equal(class(g0[[nm]]), "bn.fit.dnode",
+                 label = paste("class of node", nm))
 })
 
 # ----- get.transition.net -----------------------------------------------------
@@ -53,6 +61,14 @@ test_that("get.transition.net(DBN) returns a bn with correct nodes and arcs", {
 
 test_that("get.transition.net(dbn.fit) returns a bn.fit with correct nodes", {
   tn <- get.transition.net(build_conv_dbn_fit())
-  expect_equal(class(tn), "bn.fit")
+  expect_true(inherits(tn, "bn.fit"))
   expect_setequal(names(tn), c("A_t", "B_t"))
+})
+
+test_that("get.transition.net(dbn.fit) has correct network and node classes for a discrete DBN", {
+  tn <- get.transition.net(build_conv_dbn_fit())
+  expect_equal(class(tn), c("bn.fit", "bn.fit.dnet"))
+  for (nm in names(tn))
+    expect_equal(class(tn[[nm]]), "bn.fit.dnode",
+                 label = paste("class of node", nm))
 })

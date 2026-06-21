@@ -56,7 +56,7 @@ generate_dbn_nodes_distributions <-
   function(generated_dbn,
            fixed_cardinality,
            max_variables_cardinality) {
-    if (class(generated_dbn) != "dbn") {
+    if (!is.dbn(generated_dbn)) {
       stop("generated_dbn must be a DBN object!")
     }
     if (!is.logical(fixed_cardinality)) {

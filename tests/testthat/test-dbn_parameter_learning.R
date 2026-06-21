@@ -174,7 +174,7 @@ test_that("Learned G_0 has been generated correctly", {
     DynamicBayesianNetwork::dbn.fit(DBN = dbn, distribution = CPTs_toy)
   fitted_G_0 <-
     DynamicBayesianNetwork::get.g0.net(fitted_DBN)
-  expect_equal(class(fitted_G_0), 'bn.fit')
+  expect_true(inherits(fitted_G_0, 'bn.fit'))
   expect_equal(names(fitted_G_0), c('A_0', 'B_0'))
 })
 
@@ -235,7 +235,7 @@ test_that("Learned Transition Network has been generated correctly", {
     DynamicBayesianNetwork::dbn.fit(DBN = dbn, distribution = CPTs_toy)
   fitted_G_transition <-
     DynamicBayesianNetwork::get.transition.net(fitted_DBN)
-  expect_equal(class(fitted_G_transition), 'bn.fit')
+  expect_true(inherits(fitted_G_transition, 'bn.fit'))
   expect_equal(names(fitted_G_transition), c('A_t', 'B_t'))
 })
 

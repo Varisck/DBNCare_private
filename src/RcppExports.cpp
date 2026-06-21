@@ -41,10 +41,29 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// dbn_sample_mixed_cpp
+NumericMatrix dbn_sample_mixed_cpp(int n_samples, int max_time, List n_vars, IntegerVector n_levels, List plan_0, List plan_t, List node_ordering_0, List node_ordering_t);
+RcppExport SEXP _DynamicBayesianNetwork_dbn_sample_mixed_cpp(SEXP n_samplesSEXP, SEXP max_timeSEXP, SEXP n_varsSEXP, SEXP n_levelsSEXP, SEXP plan_0SEXP, SEXP plan_tSEXP, SEXP node_ordering_0SEXP, SEXP node_ordering_tSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type n_samples(n_samplesSEXP);
+    Rcpp::traits::input_parameter< int >::type max_time(max_timeSEXP);
+    Rcpp::traits::input_parameter< List >::type n_vars(n_varsSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type n_levels(n_levelsSEXP);
+    Rcpp::traits::input_parameter< List >::type plan_0(plan_0SEXP);
+    Rcpp::traits::input_parameter< List >::type plan_t(plan_tSEXP);
+    Rcpp::traits::input_parameter< List >::type node_ordering_0(node_ordering_0SEXP);
+    Rcpp::traits::input_parameter< List >::type node_ordering_t(node_ordering_tSEXP);
+    rcpp_result_gen = Rcpp::wrap(dbn_sample_mixed_cpp(n_samples, max_time, n_vars, n_levels, plan_0, plan_t, node_ordering_0, node_ordering_t));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_DynamicBayesianNetwork_dbn_sample_gaussian_cpp", (DL_FUNC) &_DynamicBayesianNetwork_dbn_sample_gaussian_cpp, 5},
     {"_DynamicBayesianNetwork_dbn_sample_discrete_cpp", (DL_FUNC) &_DynamicBayesianNetwork_dbn_sample_discrete_cpp, 6},
+    {"_DynamicBayesianNetwork_dbn_sample_mixed_cpp", (DL_FUNC) &_DynamicBayesianNetwork_dbn_sample_mixed_cpp, 8},
     {NULL, NULL, 0}
 };
 

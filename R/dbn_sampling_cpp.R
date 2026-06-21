@@ -113,6 +113,111 @@ plan_discrete_node <- function(net, variable, var_index, levels_list) {
 }
 
 
+plan_mixed_node = function(net, variable, var_index, levels_list) {
+  node <- net[[variable]]
+  if (is.null(node$coefficients)) {
+    stop(paste("dbn.sampling.cpp: node", variable,
+               "has no conditional gaussian coefficients (not a cgnode)"))
+  }
+
+  coef_mat <- node$coefficients
+  reg_names <- dimnames(coef_mat)[[1]]
+  if (is.null(reg_names) || reg_names[1] != intercept_name) {
+    stop(paste("dbn.sampling.cpp: the first regressor of node", variable,
+               "must be", intercept_name))
+  }
+  n_combos <- ncol(coef_mat)
+  if (length(node$sd) != n_combos) {
+    stop(paste("dbn.sampling.cpp: node", variable, "has", length(node$sd),
+               "residual sds for", n_combos, "discrete-parent combinations"))
+  }
+
+  # continuous part: like plan_gaussian_node, one (var, lag) per continuous
+  # parent. The intercept (row 1) is kept separate, mirroring the gaussian plan.
+  cont_names <- reg_names[-1]
+  cont_par_var <- integer(length(cont_names))
+  cont_par_lag <- integer(length(cont_names))
+  for (i in seq_along(cont_names)) {
+    ref <- plan_parent_ref(cont_names[i], var_index)
+    cont_par_var[i] <- ref$var
+    cont_par_lag[i] <- ref$lag
+  }
+
+  # coefficients are one vector per discrete-parent combination
+  par_coef <- lapply(seq_len(n_combos),
+                     function(k) as.numeric(coef_mat[cont_names, k]))
+
+  # discrete part: like the par_map of plan_discrete_node, one level->code
+  # translation per discrete parent, kept in $dlevels (= expand.grid) order so
+  # the combo index lines up with the columns of $coefficients / $sd.
+  dlevels <- node$dlevels
+  disc_names <- names(dlevels)
+  disc_dims <- integer(length(dlevels))
+  dis_par_var <- integer(length(dlevels))
+  dis_par_lag <- integer(length(dlevels))
+  par_code <- vector("list", length(dlevels))
+  for (j in seq_along(dlevels)) {
+    ref <- plan_parent_ref(disc_names[j], var_index)
+    dis_par_var[j] <- ref$var
+    dis_par_lag[j] <- ref$lag
+    disc_dims[j] <- length(dlevels[[j]])
+    codes <- match(dlevels[[j]],
+                   levels_list[[split_variable_name(disc_names[j])$name]]) - 1L
+    codes[is.na(codes)] <- -1L
+    par_code[[j]] <- as.integer(codes)
+  }
+
+  list(var = var_index[[split_variable_name(variable)$name]],
+       intercept = as.numeric(coef_mat[1, ]),
+       std = as.numeric(node$sd),
+       cont_par_var = cont_par_var,
+       cont_par_lag = cont_par_lag,
+       par_coef = par_coef,
+       disc_dims = disc_dims,
+       disc_par_var = dis_par_var,
+       disc_par_lag = dis_par_lag,
+       disc_par_map = par_code)
+}
+
+plan_all_mix = function(net, ordered_nodes, var_index, levels_list) {
+  plan = list()
+  plan[["discrete"]] = list()
+  plan[["gaussian"]] = list()
+  plan[["mixed"]] = list()
+
+  disc_idx <- 0L
+  gauss_idx <- 0L
+  mix_idx <- 0L
+
+  type_vec <- integer(length(ordered_nodes))
+  idx_vec <- integer(length(ordered_nodes))
+
+  for (i in seq_along(ordered_nodes)) {
+    nname = ordered_nodes[i]
+    node = net[[nname]]
+    if (inherits(node, "bn.fit.dnode")) {
+      plan[["discrete"]][[nname]] = plan_discrete_node(net, nname, var_index, levels_list)
+      type_vec[i] = 0L
+      idx_vec[i] = disc_idx
+      disc_idx = disc_idx + 1
+    } else if (inherits(node, "bn.fit.gnode")) {
+      plan[["gaussian"]][[nname]] = plan_gaussian_node(net, nname, var_index)
+      type_vec[i] = 1L
+      idx_vec[i] = gauss_idx
+      gauss_idx = gauss_idx + 1
+    } else if (inherits(node, "bn.fit.cgnode")) {
+      plan[["mixed"]][[nname]] = plan_mixed_node(net, nname, var_index, levels_list)
+      type_vec[i] = 2L
+      idx_vec[i] = mix_idx
+      mix_idx = mix_idx + 1
+    } else stop(paste("ERROR: class not recognized for node", nname, "after get.transition.net"))
+  }
+  list(plan = plan, 
+       ordering = list(vector_type = type_vec, 
+                       index_vec = idx_vec))
+}
+
+
 #' Generate a sampling dataset
 #'
 #'
@@ -140,12 +245,12 @@ dbn.sampling <- function(fitted_dbn, n_samples, max_time) {
   if (n_samples < 1) {
     stop("N_samples must be greater than 0!")
   }
-  if (class(fitted_dbn) != "dbn.fit") {
+  if (!is.dbn.fit(fitted_dbn)) {
     stop("fitted_DBN must be a dbn.fit object")
   }
 
   dbn_type <- dbn_type(fitted_dbn)
-  if (!dbn_type %in% c("discrete", "gaussian")) {
+  if (!dbn_type %in% c("discrete", "gaussian", "mixed")) {
     stop("Invalid dbn_type")
   }
 
@@ -177,7 +282,7 @@ dbn.sampling <- function(fitted_dbn, n_samples, max_time) {
     values <- dbn_sample_gaussian_cpp(n_samples, max_time, length(base_names),
                                       plan_0, plan_t)
     columns <- lapply(seq_along(base_names), function(i) values[, i])
-  } else {
+  } else if (dbn_type == "discrete") {
     levels_list <- discrete_levels(bn_0, bn_transition, base_names)
     plan_0 <- lapply(nodes_0, function(v) plan_discrete_node(bn_0, v, var_index, levels_list))
     plan_t <- lapply(nodes_t, function(v) plan_discrete_node(bn_transition, v, var_index, levels_list))
@@ -186,6 +291,50 @@ dbn.sampling <- function(fitted_dbn, n_samples, max_time) {
                                      plan_0, plan_t)
     columns <- lapply(seq_along(base_names),
                       function(i) levels_list[[base_names[i]]][codes[, i] + 1L])
+  } else if (dbn_type == "mixed") {
+    # split the base variables by node type (discrete / gaussian / cgnode)
+    discrete_nodes <- base_names[vapply(
+      base_names,
+      \(n) inherits(fitted_dbn[[paste0(n, "_t")]], "dbn.fit.dnode"),
+      logical(1)
+    )]
+    gaussian_nodes <- base_names[vapply(
+      base_names,
+      \(n) inherits(fitted_dbn[[paste0(n, "_t")]], "dbn.fit.gnode"),
+      logical(1)
+    )]
+    levels_list <- discrete_levels(bn_0, bn_transition, discrete_nodes)
+
+    parse_0 <- plan_all_mix(bn_0, nodes_0, var_index, levels_list)
+    parse_t <- plan_all_mix(bn_transition, nodes_t, var_index, levels_list)
+
+    plan_0 <- parse_0$plan
+    ordering_0 <- parse_0$ordering
+    plan_t <- parse_t$plan
+    ordering_t <- parse_t$ordering
+
+    # the C++ core indexes n_levels by the global column, so it needs one entry
+    # per base variable: the level count for discrete columns, 0 elsewhere
+    nlevels <- integer(length(base_names))
+    for (nm in discrete_nodes)
+      nlevels[var_index[[nm]] + 1L] <- length(levels_list[[nm]])
+
+    nvars = list("discrete" = length(discrete_nodes),
+                 "gaussian" = length(gaussian_nodes),
+                 "mixed" = length(base_names) - length(discrete_nodes)
+                             - length(gaussian_nodes))
+
+    values <- dbn_sample_mixed_cpp(n_samples, max_time, nvars,
+                                 nlevels, plan_0, plan_t, ordering_0, ordering_t)
+
+    # discrete columns: canonical codes -> labels; continuous columns: as-is
+    columns <- lapply(seq_along(base_names), function(i) {
+      nm <- base_names[i]
+      if (nm %in% discrete_nodes)
+        levels_list[[nm]][values[, i] + 1L]
+      else
+        values[, i]
+    })
   }
   names(columns) <- base_names
 
