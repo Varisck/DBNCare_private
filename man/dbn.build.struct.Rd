@@ -20,12 +20,12 @@ An object of class 'dbn' with the characteristics of \eqn{G_0} and \eqn{G_{trans
 Generation of a Dynamic Bayesian Network given two compatible networks \eqn{G_0} and \eqn{G_{transition}}
 }
 \examples{
-DBN <- random.structure.dbn(c("A","B","C"), 0.5, 0.5, markov_order = 1)
-DBN_fitted <- generate_dbn_nodes_distributions(DBN,c("A","B","C"), TRUE, 2)
+DBN <- random.structure.dbn(c("A", "B", "C"), 0.5, 0.5, markov_order = 1)
+DBN_fitted <- generate_dbn_nodes_distributions(DBN, c("A", "B", "C"), TRUE, 2)
 data <- dbn_sampling(DBN_fitted, 2000, 5)
 c(data0, dataTR, ., blacklistTR, ., .) \%<-\% dbn.prep.data(data = data, markov_order = 1)
 bn_sampled_0 <- pc.stable(data0)
 bn_sampled_TR <- pc.stable(dataTR, blacklist = blacklistTR)
-dbn.build.struct(PN = bn_sampled_0, TN =  bn_sampled_TR, markov_order = 1)
+dbn.build.struct(PN = bn_sampled_0, TN = bn_sampled_TR, markov_order = 1)
 
 }

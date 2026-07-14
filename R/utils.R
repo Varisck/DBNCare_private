@@ -95,8 +95,8 @@ get_node_edges <- function(dbn_transition, node, time_slice) {
 
 #' get_unrolled_dbn
 #' 
-#' @description 
-#' this function generates an unrolled dynamic bayesian network
+#' @description this function generates an unrolled dynamic bayesian network
+#' 
 #' @param dbn_fitted a dbn.fit class object
 #' @param slices number of time-slice of the unrolled network
 #'
@@ -215,9 +215,14 @@ split_variable_name = function(variable) {
   var_split = strsplit(variable, "_")[[1]]
   if(length(var_split) == 1) stop("Error split_variable_name input is not a recognized variable") 
   var_name = paste(var_split[1:(length(var_split) - 1)], collapse = '_')
-  if(!grepl("^(t-\\d+|0|t)$", var_split[length(var_split)])) stop("Error split_variable_name time format not recognized")
+
+  if(!grepl("^(t-\\d+|[0-9]+|t)$", var_split[length(var_split)])) stop("Error split_variable_name time format not recognized")
+  
+  # if time is of format like _2 -> t_2
   var_time = ifelse(
-    var_split[length(var_split)] == '0', 't_0', var_split[length(var_split)]
+    grepl("^[0-9]+$", var_split[length(var_split)]),
+        paste0('t_', var_split[length(var_split)]),
+        var_split[length(var_split)]
   )
   list("name" = var_name, "time" = var_time)
 }
@@ -251,7 +256,7 @@ get_variable_name <- function(n) {
 #' time <- split_variable_time("A_0")
 #' time == "t_0"
 get_variable_time <- function(n) {
-  split_variable_name(n)$name
+  split_variable_name(n)$time
 }
 
 #' Get the parents of a node
@@ -325,140 +330,4 @@ get_nodes_t <- function(G_transition) {
   }
   return(nodes_t)
 }
-
-
-#' Return the maximum markov order of a dbn.fit object
-#'
-#' @param dbn an object of class dbn.fit
-#' 
-#' @returns markov order of the dbn
-#' @export
-#' 
-#' @examples
-#' mo <- get_max_mo_dbn_fit(fit)
-get_max_mo_dbn_fit = function(dbn) {
-  if(!is.dbn.fit(dbn))
-    stop("get_max_mo_dbn_fit input object is not a dbn.fit")
-  nodes_t = get_nodes_t(remove_prev_time_from_bn_fit(dbn))
-  mx = 0
-  for(n in nodes_t) {
-    if("prob" %in% names(dbn[[n]])) {
-      regnames = names(dimnames(dbn[[n]]$prob))
-    } else {
-      regnames = names(dbn[[n]]$regs)
-      if(length(regnames) > 1) regnames = regnames[2:length(regnames)]
-      else regnames = character(0)
-    }
-    lagged = regnames[grepl("t-[0-9]+$", regnames)]
-    if(length(lagged) > 0) {
-      tl = as.double(sub(".*t-([0-9]+)$", "\\1", lagged))
-      mx = max(mx, max(tl))
-    }
-  }
-  mx
-}
-
-
-
-#' Return type of dbn
-#'
-#' @param dbn object of type dbn.fit
-#' @returns string "discrete", "gaussian" or "mixed"
-#'
-#' @details if the type is not recognized raise error
-#' 
-#' @export
-#' @examples
-#' type <- dbn_type(dbn)
-dbn_type = function(dbn) {
-  if(!is.dbn.fit(dbn)) {
-    stop("dbn_type input dbn must be object of class dbn.fit")
-  }
-
-  nodes = names(dbn)[grepl("_t$", names(dbn))]
-
-  discrete = sapply(nodes, \(n) !is.null(dbn[[n]]$prob))
-  gaussian = sapply(nodes, \(n) !is.null(dbn[[n]]$regs))
-  mixed = sapply(nodes, \(n) !is.null(dbn[[n]]$coefficients))
-
-  if(all(discrete)) return("discrete")
-  if(all(gaussian)) return("gaussian")
-  if(any(mixed)) return("mixed")
-
-  stop("ERROR: dbn_type not recognized!")
-}
-
-
-#' Return type of a dataset
-#'
-#' Inspects the variable columns of a dataset (every column except
-#' \code{Sample_id} and \code{Time}) and reports whether the data is
-#' discrete, gaussian (continuous numeric) or mixed.
-#'
-#' @param data a data.frame
-#' @returns string "discrete", "gaussian" or "mixed"
-#'
-#' @details factor and character columns count as discrete; numeric
-#'   columns count as gaussian. Raises an error if no variable columns
-#'   are found or if any column is of an unsupported type.
-#'
-#' @export
-#' @examples
-#' type <- data_type(data)
-dataset_type = function(data) {
-  if(!is.data.frame(data)) {
-    stop("data_type input data must be a data.frame")
-  }
-
-  vars = setdiff(colnames(data), c("Sample_id", "Time"))
-  if(length(vars) == 0) {
-    stop("data_type no variable columns found (only Sample_id/Time present)")
-  }
-
-  discrete = sapply(vars, \(v) is.factor(data[[v]]) || is.character(data[[v]]))
-  gaussian = sapply(vars, \(v) is.numeric(data[[v]]))
-
-  unsupported = !(discrete | gaussian)
-  if(any(unsupported)) {
-    stop(paste("data_type unsupported column type(s):",
-               paste(vars[unsupported], collapse = ", ")))
-  }
-
-  if(all(discrete)) return("discrete")
-  if(all(gaussian)) return("gaussian")
-  "mixed"
-}
-
-#' Given a data.frame and a markov_order builds a transition data.frame
-#'
-#' @param data a data.frame
-#' @param markov_order = 1 markov order of the data frame
-#' @param separator = "-" separator to use when creating variable X_t-k
-#' @returns data.frame shifted df
-#'
-#' @details for each variable excluding Sample_id and Time creates 
-#'  variables X_t, ..., X_t-k where k is the markov_order
-#'
-#' @export
-#' @examples
-#' shifted_df <- build_shifted_df(data, 4)
-build_shifted_df = function(data, markov_order = 1, separator = "-"){
-  names(data) = lapply(names(data), concat_name_post, postfix = "_t")
-  
-  vars = setdiff(names(data), c("Sample_id", "Time"))
-  
-  for(shift in 1:markov_order) {
-    for(variable in vars) {
-      data = data %>% dplyr::group_by(Sample_id) %>%
-        dplyr::mutate(!!paste0(variable, separator, shift) :=
-                 dplyr::lag(.data[[variable]], n = shift, default = NA))
-    }
-  }
-  data = data %>% dplyr::ungroup() %>% stats::na.omit()
-  as.data.frame(data)
-}
-
-
-
-
 

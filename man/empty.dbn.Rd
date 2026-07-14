@@ -4,14 +4,14 @@
 \alias{empty.dbn}
 \title{Function to create a Dynamic Bayesian Network}
 \usage{
-empty.dbn(static_nodes = c(), dynamic_nodes, markov_order)
+empty.dbn(dynamic_nodes, markov_order, static_nodes = c())
 }
 \arguments{
-\item{static_nodes}{character vector listing the time-independent nodes}
-
 \item{dynamic_nodes}{character vector listing the time-dependent nodes}
 
 \item{markov_order}{integer value (> 1): markovian order of the process}
+
+\item{static_nodes}{character vector listing the time-independent nodes}
 }
 \value{
 object of class 'dbn'
@@ -20,6 +20,6 @@ object of class 'dbn'
 Function to create a Dynamic Bayesian Network
 }
 \examples{
-DBN_example <- empty.dbn(static_nodes = c("K"), dynamic_nodes = c("A", "S", "E", "O", "R", "T", "B"), markov_order = 1)
+DBN_example <- empty.dbn(dynamic_nodes = c("A", "S", "E", "O", "R", "T", "B"), markov_order = 1)
 class(DBN_example) # 'dbn'
 }

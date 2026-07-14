@@ -6,42 +6,50 @@
 \usage{
 dbn.fit(
   DBN,
-  CPTs = list(),
-  CPDs = list(),
+  distribution = NULL,
   data = data.frame(),
-  replace.unidentifiable = FALSE
+  replace.unidentifiable = FALSE,
+  compute.priors = FALSE
 )
 }
 \arguments{
 \item{DBN}{object of class 'dbn'}
 
-\item{CPTs}{list of multi-dimensional arrays (CPTs for each DBN node, discrete)}
-
-\item{CPDs}{list of named numeric vectors (regression coefficients + std, gaussian)}
+\item{distribution}{named list of per-node distributions. Each entry is one of:
+a multi-dimensional array (CPT, discrete), a named numeric vector
+(regression coefficients + std, gaussian), or a \code{list(coef, sd)} (CLG, mixed).
+The type is detected automatically by the function.}
 
 \item{data}{data.frame object}
 
 \item{replace.unidentifiable}{If TRUE conditional probabilities for unobserved
 parents combinations (unidentifiable parameters) are replaced by uniform
-conditional probabilities, if FALSE (default) they are set as NA. Discrete only.}
+conditional probabilities, if FALSE (default) they are set as NA, in the discrete case.
+In the conditional gaussian if replace.unidentifiable is TRUE set variable regressors to marginals
+if FALSE they are set to NA.}
+
+\item{compute.priors}{(default to FALSE) if TRUE marginal distributions of nodes with < markov_order are included,
+if FALSE the distributions are conditional to the structure.}
 }
 \value{
 object of class 'dbn.fit'
 }
 \description{
-If a data.frame is given, the function inspects the class of each column exept
-\code{Time} and \code{Sample_id}, if all columns are factor discrete parameter learning is used
-if they are all numeric gaussian parameter learning. Mixed case is not supported at the time.
+If a data.frame is given, the function inspects the class of each column except
+\code{Time} and \code{Sample_id}: if all columns are factor, discrete parameter learning is
+used; if all columns are numeric, gaussian parameter learning is used. Mixed case is not
+supported yet.
 }
 \details{
-Dispatcher for parameter learning. Routes to the discrete or gaussian
-subroutine based on what the user provides:
+Dispatcher for parameter learning. Routes to the discrete, gaussian, or
+mixed subroutine based on the type of \code{distribution} provided:
 \itemize{
-\item \code{CPTs} non-empty -> discrete network learned from CPTs
-\item \code{CPDs} non-empty -> gaussian network learned from CPDs
-\item only \code{data}      -> dataset_type(data) decides the subroutine
+\item arrays (CPTs)                        -> discrete network
+\item named numeric vectors (CPDs)         -> gaussian network
+\item lists with \code{$coef}/\code{$sd} (CLG) -> mixed network (not yet supported)
+\item only \code{data}                     -> dataset_type(data) decides the subroutine
 }
-Exactly one of \code{CPTs}, \code{CPDs} or \code{data} must be non-empty.
+Exactly one of \code{distribution} or \code{data} must be non-NULL/non-empty.
 }
 \examples{
 learned_dbn <- dbn.fit(DBN = DBN_example, data = sampling_set)

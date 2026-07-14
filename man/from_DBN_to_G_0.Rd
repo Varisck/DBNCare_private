@@ -15,6 +15,12 @@ object of class 'bn'
 \description{
 Transformation of a DBN in a G_0 network
 }
+\details{
+When the DBN was built with \code{extend_g0 = TRUE}, G_0 spans
+several initial slices stored under keys \code{t_0}, \code{t_1}, ...,
+\code{t_(markov_order - 1)} (dynamic nodes only); static nodes always have
+only a \code{t_0} slice. Each slice \code{t_i} becomes a node \code{var_i}.
+}
 \examples{
 G_0 <- from_DBN_to_G_0(DBN_example)
 }

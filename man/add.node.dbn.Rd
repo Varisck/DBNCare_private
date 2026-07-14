@@ -20,6 +20,6 @@ object of class 'dbn'
 Function for node addiction in Dynamic Bayesian Network
 }
 \examples{
-DBN_example <- add.node.dbn(DBN=DBN_example, node="F", type='Dynamic')
-DBN_example <- add.node.dbn(DBN=DBN_example, node="K", type='Static')
+DBN_example <- add.node.dbn(DBN = DBN_example, node = "F", type = "Dynamic")
+DBN_example <- add.node.dbn(DBN = DBN_example, node = "K", type = "Static")
 }

@@ -106,6 +106,8 @@ test_that("split_variable_name returns the correct generic node name", {
   expect_equal(split_variable_name("H_0")$name, "H")
   expect_equal(split_variable_name("H_0N2_0")$name, "H_0N2")
   expect_equal(split_variable_name("test_test_test_t")$name, "test_test_test")
+  expect_equal(split_variable_name("A_2")$name, "A")
+  expect_equal(split_variable_name("A_2")$time, "t_2")
   
   expect_error(split_variable_name(10))
   expect_error(split_variable_name("A")$name)

@@ -2,14 +2,17 @@
 # Not exported.
 
 node_id <- function(name, time) {
-  if (time == 't_0') paste0(name, '_0') else paste0(name, '_', time)
+  # G_0 slices t_0, t_1, ... map to var_0, var_1, ...; t / t-k stay as var_t / var_t-k
+  if (grepl('^t_[0-9]+$', time)) paste0(name, '_', sub('^t_', '', time))
+  else paste0(name, '_', time)
 }
 
 parse_node_id <- function(id) {
   parts <- strsplit(id, '_')[[1]]
   name <- paste(parts[1:(length(parts) - 1)], collapse = '_')
   time_token <- parts[length(parts)]
-  time <- ifelse(time_token == '0', 't_0', time_token)
+  # numeric suffixes (var_0, var_1, ...) are G_0 slices and map back to t_0, t_1, ...
+  time <- if (grepl('^[0-9]+$', time_token)) paste0('t_', time_token) else time_token
   list(name = name, time = time)
 }
 
@@ -85,7 +88,8 @@ delete_arc_element <- function(x, element) {
 blacklist_g0_gt = function(g_0_nodes, g_t_nodes, markov_order = 1,
                            static_nodes = c(),
                            allow_intraslice_edges = TRUE,
-                           allow_t_0_edges = TRUE) {
+                           allow_t_0_edges = TRUE,
+                           extend_g0 = TRUE) {
   b = rbind(
     # A_0 -> A_t
     expand.grid(from = g_0_nodes, to = g_t_nodes),
@@ -112,6 +116,21 @@ blacklist_g0_gt = function(g_0_nodes, g_t_nodes, markov_order = 1,
         # A_t-i -> A_t-j
         expand.grid(from = g_t_i_nodes, to = g_t_j_nodes)
       )
+    }
+  }
+
+  if(extend_g0) {
+    nodes_ends_in_0 = g_0_nodes[grepl("_0$", g_0_nodes)]
+    # A_mo -> A_j  ->  j < mo
+    for(mo in seq_len(markov_order - 1)) {
+      for(mo2 in 0:(mo - 1)) {
+        b = rbind(
+          b, 
+          expand.grid(from = sub("_0$", paste0("_", mo), nodes_ends_in_0), 
+                      to = sub("_0$", paste0("_", mo2), nodes_ends_in_0)
+          )
+        )
+      }
     }
   }
 
@@ -148,6 +167,170 @@ blacklist_g0_gt = function(g_0_nodes, g_t_nodes, markov_order = 1,
       expand.grid(from = g_0_nodes, to = g_0_nodes)
     )
   return(b)
+}
+
+
+#' Return the maximum markov order of a dbn.fit object
+#'
+#' @param dbn an object of class dbn.fit
+#' 
+#' @returns markov order of the dbn
+#' @export
+#' 
+#' @examples
+#' mo <- get_max_mo_dbn_fit(fit)
+get_max_mo_dbn_fit = function(dbn) {
+  if(!is.dbn.fit(dbn))
+    stop("get_max_mo_dbn_fit input object is not a dbn.fit")
+  nodes_t = get_nodes_t(remove_prev_time_from_bn_fit(dbn))
+  mx = 0
+  for(n in nodes_t) {
+    if("prob" %in% names(dbn[[n]])) {
+      regnames = names(dimnames(dbn[[n]]$prob))
+    } else {
+      regnames = names(dbn[[n]]$regs)
+      if(length(regnames) > 1) regnames = regnames[2:length(regnames)]
+      else regnames = character(0)
+    }
+    lagged = regnames[grepl("t-[0-9]+$", regnames)]
+    if(length(lagged) > 0) {
+      tl = as.double(sub(".*t-([0-9]+)$", "\\1", lagged))
+      mx = max(mx, max(tl))
+    }
+  }
+  mx
+}
+
+#' Return type of dbn
+#'
+#' @param dbn object of type dbn.fit
+#' @returns string "discrete", "gaussian" or "mixed"
+#'
+#' @details if the type is not recognized raise error
+#' 
+#' @export
+#' @examples
+#' type <- dbn_type(dbn)
+dbn_type = function(dbn) {
+  if(!is.dbn.fit(dbn)) {
+    stop("dbn_type input dbn must be object of class dbn.fit")
+  }
+
+  nodes = names(dbn)[grepl("_t$", names(dbn))]
+
+  discrete = sapply(nodes, \(n) !is.null(dbn[[n]]$prob))
+  gaussian = sapply(nodes, \(n) !is.null(dbn[[n]]$regs))
+  mixed = sapply(nodes, \(n) !is.null(dbn[[n]]$coefficients))
+
+  if(all(discrete)) return("discrete")
+  if(all(gaussian)) return("gaussian")
+  if(any(mixed)) return("mixed")
+
+  stop("ERROR: dbn_type not recognized!")
+}
+
+
+#' Return type of a dataset
+#'
+#' Inspects the variable columns of a dataset (every column except
+#' \code{Sample_id} and \code{Time}) and reports whether the data is
+#' discrete, gaussian (continuous numeric) or mixed.
+#'
+#' @param data a data.frame
+#' @returns string "discrete", "gaussian" or "mixed"
+#'
+#' @details factor and character columns count as discrete; numeric
+#'   columns count as gaussian. Raises an error if no variable columns
+#'   are found or if any column is of an unsupported type.
+#'
+#' @export
+#' @examples
+#' type <- data_type(data)
+dataset_type = function(data) {
+  if(!is.data.frame(data)) {
+    stop("data_type input data must be a data.frame")
+  }
+
+  vars = setdiff(colnames(data), c("Sample_id", "Time"))
+  if(length(vars) == 0) {
+    stop("data_type no variable columns found (only Sample_id/Time present)")
+  }
+
+  discrete = sapply(vars, \(v) is.factor(data[[v]]) || is.character(data[[v]]))
+  gaussian = sapply(vars, \(v) is.numeric(data[[v]]))
+
+  unsupported = !(discrete | gaussian)
+  if(any(unsupported)) {
+    stop(paste("data_type unsupported column type(s):",
+               paste(vars[unsupported], collapse = ", ")))
+  }
+
+  if(all(discrete)) return("discrete")
+  if(all(gaussian)) return("gaussian")
+  "mixed"
+}
+
+#' Given a data.frame and a markov_order builds a transition data.frame
+#'
+#' @param data a data.frame
+#' @param markov_order = 1 markov order of the data frame
+#' @param separator = "-" separator to use when creating variable X_t-k
+#' @returns data.frame shifted df
+#'
+#' @details for each variable excluding Sample_id and Time creates 
+#'  variables X_t, ..., X_t-k where k is the markov_order
+#'
+#' @export
+#' @examples
+#' shifted_df <- build_shifted_df(data, 4)
+build_shifted_df = function(data, markov_order = 1, separator = "-"){
+  names(data) = lapply(names(data), concat_name_post, postfix = "_t")
+  
+  vars = setdiff(names(data), c("Sample_id", "Time"))
+  
+  for(shift in 1:markov_order) {
+    for(variable in vars) {
+      data = data %>% dplyr::group_by(Sample_id) %>%
+        dplyr::mutate(!!paste0(variable, separator, shift) :=
+                 dplyr::lag(.data[[variable]], n = shift, default = NA))
+    }
+  }
+  data = data %>% dplyr::ungroup() %>% stats::na.omit()
+  as.data.frame(data)
+}
+
+
+#' Given a data.frame and a markov_order builds a data.frame for the initial conditions
+#'
+#' @param data a data.frame
+#' @param markov_order = 1 markov order of the data frame
+#' @param separator the separator to use when defining the new variable names (A{separator}i)
+#' @param extend_g0 = TRUE if TRUE include times 0 to (markov_order - 1) as variables; if FALSE only time 0
+#' @returns data.frame with each time from 0 to (markov_order - 1) as a variable
+#'
+#' @details for each variable excluding Sample_id and Time creates
+#'  variables A_0, ..., A_(k - 1) where k is the markov_order. If extend_g0 is
+#'  FALSE only the A_0 variables are created.
+#'
+#' @export
+#' @examples
+#' shifted_df <- build_g0_df(data, 4)
+build_g0_df = function(data, markov_order = 1, separator = "_", extend_g0 = TRUE) {
+  max_time = if (extend_g0) (markov_order - 1) else 0
+  df = data[data$Time >= 0 & data$Time <= max_time, ]
+  
+  vars = setdiff(names(df), c("Sample_id", "Time"))
+  
+  df %>%
+    dplyr::select(Sample_id, Time, all_of(vars)) %>%
+    tidyr::pivot_wider(
+      id_cols    = Sample_id,
+      names_from = Time,
+      values_from = all_of(vars),
+      names_glue = paste0("{.value}", separator, "{Time}")
+    ) %>%
+    stats::na.omit() %>%
+    as.data.frame()
 }
 
 
@@ -208,17 +391,11 @@ summary.dbn <- function(DBN, test = FALSE) {
   static_nodes <- nodes - dynamic_nodes
   arcs = nrow(DBN$arcs)
   intra_slice_arcs = 0
-  inner_slice_arcs = length(unlist(sapply(DBN$arcs[, 'from'], function(x) {
-    quanteda::char_select(x, '*_t')
-  })))
-  prior_arcs = length(unlist(sapply(DBN$arcs[, 'to'], function(x) {
-    quanteda::char_select(x, '*_0')
-  })))
+  inner_slice_arcs = sum(grepl("_t$", DBN$arcs[, 'from']))
+  prior_arcs = sum(grepl("_0$", DBN$arcs[, 'to']))
   for (j in 1:mo) {
     intra_slice_arcs <-
-      intra_slice_arcs + length(unlist(sapply(DBN$arcs[, 'from'], function(x) {
-        quanteda::char_select(x, paste0('*_t-', j))
-      })))
+      intra_slice_arcs + sum(grepl(paste0("_t-", j, "$"), DBN$arcs[, 'from']))
   }
   if (test == FALSE) {
     cat('Dynamic Bayesian Network \n\n\n')

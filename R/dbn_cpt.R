@@ -193,9 +193,7 @@ define_CPTs <-
   function(DBN = empty.dbn(dynamic_nodes = c(), markov_order = 1)) {
     static_nodes <- bnlearn::node.ordering(from_DBN_to_G_0(DBN))
     dynamic_nodes <-
-      quanteda::char_select(bnlearn::node.ordering(from_DBN_to_G_transition(DBN)),
-                            "*t",
-                            valuetype = "glob")
+      grep("_t$", bnlearn::node.ordering(from_DBN_to_G_transition(DBN)), value = TRUE)
     CPTs <- list()
     defined_levels <- list()
     for (i in static_nodes) {
@@ -295,8 +293,7 @@ define_cpds = function(dbn = empty_DBN(dynamic_nodes = c(), markov_order = 1)) {
   g_t = from_DBN_to_G_transition(dbn)
   node_order = bnlearn::node.ordering(g_t)
   nodes =c(static_nodes, 
-           quanteda::char_select(node_order, "*t", 
-                                 valuetype = "glob"))
+           grep("_t$", node_order, value = TRUE))
   
   Regs = list()
   for (node in nodes) {

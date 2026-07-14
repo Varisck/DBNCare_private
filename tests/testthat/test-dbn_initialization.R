@@ -113,7 +113,7 @@ test_that("add.arc.dbn returns the expected output", {
       from = c('C', 't'),
       to = c('A', 't_0')
     ),
-    "ERROR: Prior arcs must be between nodes at 't_0'"
+    "ERROR: Prior arcs must be between nodes in G_0"
   )
   expect_error(
     add.arc.dbn(
@@ -121,7 +121,7 @@ test_that("add.arc.dbn returns the expected output", {
       from = c('A', 't'),
       to = c('B', 't-1')
     ),
-    "ERROR: Children nodes in DBN must be at time 't' or 't_0'"
+    "ERROR: Children nodes in DBN must be at time 't' or in G_0"
   )
   expect_error(
     add.arc.dbn(
@@ -145,7 +145,7 @@ test_that("add.arc.dbn returns the expected output", {
       from = c('A', 't'),
       to = c('C', 't+1')
     ),
-    "ERROR: Children nodes in DBN must be at time 't' or 't_0'"
+    "ERROR: Children nodes in DBN must be at time 't' or in G_0"
   )
   expect_error(add.arc.dbn(
     DBN = dbn,
@@ -159,6 +159,59 @@ test_that("add.arc.dbn returns the expected output", {
       to = c('C', 't')
     ),
     "ERROR: Transition arcs could not be of order higher than DBN's Markov Order"
+  )
+})
+
+test_that("add.arc.dbn allows arcs between G_0 slices when markov_order >= 2", {
+  dbn <- empty.dbn(dynamic_nodes = c('A', 'B', 'C'), markov_order = 2)
+
+  # forward arc across initial slices: A_0 -> A_1
+  expect_error(add.arc.dbn(dbn, from = c('A', 't_0'), to = c('A', 't_1')), NA)
+  dbn <- add.arc.dbn(dbn, from = c('A', 't_0'), to = c('A', 't_1'))
+  # B_0 -> A_1 and an intra-slice arc at t_1: A_1 -> B_1
+  dbn <- add.arc.dbn(dbn, from = c('B', 't_0'), to = c('A', 't_1'))
+  dbn <- add.arc.dbn(dbn, from = c('A', 't_1'), to = c('B', 't_1'))
+
+  # the t_1 slice is created on demand with fully-formed (non-NULL) details
+  expect_true('t_1' %in% names(dbn$nodes$A))
+  expect_equal(dbn$nodes$A[['t_1']]$parents,  c('A_0', 'B_0'))
+  expect_equal(dbn$nodes$A[['t_1']]$children, 'B_1')
+  expect_equal(dbn$nodes$B[['t_1']]$parents,  'A_1')
+  expect_equal(dbn$nodes$B[['t_1']]$children, character(0))
+  expect_equal(unname(dbn$arcs[1, ]), c('A_0', 'A_1'))
+
+  # the extended slices surface in G_0 as var_0 / var_1 nodes
+  g0 <- from_DBN_to_G_0(dbn)
+  expect_true(all(c('A_0', 'A_1', 'B_0', 'B_1') %in% names(g0$nodes)))
+  expect_equal(g0$nodes[['A_1']]$parents, c('A_0', 'B_0'))
+
+  # deleting an extended-G_0 arc removes it cleanly
+  dbn <- delete.arc.dbn(dbn, from = c('A', 't_1'), to = c('B', 't_1'))
+  expect_equal(dbn$nodes$B[['t_1']]$parents, character(0))
+})
+
+test_that("add.arc.dbn rejects G_0 slices at or above the Markov order", {
+  dbn2 <- empty.dbn(dynamic_nodes = c('A', 'B'), markov_order = 2)
+  # t_2 is not a valid G_0 slice for markov_order = 2 (only t_0, t_1)
+  expect_error(
+    add.arc.dbn(dbn2, from = c('A', 't_0'), to = c('B', 't_2')),
+    "ERROR: G_0 slices must be lower than the Markov Order"
+  )
+  expect_error(
+    add.arc.dbn(dbn2, from = c('A', 't_2'), to = c('B', 't_0')),
+    "ERROR: G_0 slices must be lower than the Markov Order"
+  )
+  # a transition node cannot be the parent of a G_0 node
+  expect_error(
+    add.arc.dbn(dbn2, from = c('A', 't'), to = c('B', 't_1')),
+    "ERROR: Prior arcs must be between nodes in G_0"
+  )
+
+  # with markov_order = 1, G_0 is only the t_0 slice
+  dbn1 <- empty.dbn(dynamic_nodes = c('A', 'B'), markov_order = 1)
+  expect_error(
+    add.arc.dbn(dbn1, from = c('A', 't_0'), to = c('A', 't_1')),
+    "ERROR: G_0 slices must be lower than the Markov Order"
   )
 })
 
@@ -349,7 +402,7 @@ test_that("blacklist is generated correctly", {
 
   # d=1, k=2 → 1 * 3 * 4 = 12
   dbn_d1k2 <- empty.dbn(dynamic_nodes = c('A'), markov_order = 2)
-  expect_equal(nrow(dbn_d1k2$learning$blacklist), 12)
+  expect_equal(nrow(dbn_d1k2$learning$blacklist), 13)
   bl2 <- dbn_d1k2$learning$blacklist
   expect_true(in_bl(bl2, 'A_t-2', 'A_t-1'))  # lagged-to-lagged, order 2
   expect_true(in_bl(bl2, 'A_t', 'A_t-2'))    # t → t-2 forbidden

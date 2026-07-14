@@ -101,6 +101,11 @@ from_DBN_to_G_transition <- function(DBN) {
 #'
 #' @return object of class 'bn'
 #'
+#' @details When the DBN was built with \code{extend_g0 = TRUE}, G_0 spans
+#'   several initial slices stored under keys \code{t_0}, \code{t_1}, ...,
+#'   \code{t_(markov_order - 1)} (dynamic nodes only); static nodes always have
+#'   only a \code{t_0} slice. Each slice \code{t_i} becomes a node \code{var_i}.
+#'
 #' @examples
 #' G_0 <- from_DBN_to_G_0(DBN_example)
 from_DBN_to_G_0 <- function(DBN) {
@@ -108,10 +113,15 @@ from_DBN_to_G_0 <- function(DBN) {
     stop("ERROR: DBN argument is not of class 'dbn'")
   PN <- empty_bn_shell()
   for (j in names(DBN$nodes)) {
-    child_id <- node_id(j, 't_0')
-    PN[['nodes']][[child_id]] <- DBN[['nodes']][[j]][['t_0']]
-    for (k in DBN[['nodes']][[j]][['t_0']][['parents']]) {
-      PN[['arcs']] <- rbind(PN$arcs, c(k, child_id))
+    # G_0 may span several initial slices (t_0, t_1, ...) when extend_g0 = TRUE;
+    # t-i / t / type keys are excluded by the anchored pattern.
+    g0_slices <- grep("^t_[0-9]+$", names(DBN$nodes[[j]]), value = TRUE)
+    for (slice_key in g0_slices) {
+      child_id <- paste0(j, "_", sub("^t_", "", slice_key))
+      PN[['nodes']][[child_id]] <- DBN[['nodes']][[j]][[slice_key]]
+      for (k in DBN[['nodes']][[j]][[slice_key]][['parents']]) {
+        PN[['arcs']] <- rbind(PN$arcs, c(k, child_id))
+      }
     }
   }
   class(PN) <- "bn"
@@ -133,8 +143,11 @@ from_DBN_to_G_0 <- function(DBN) {
 from_fitted_DBN_to_fitted_G_0 <- function(DBN_fitted) {
   if (!is.dbn.fit(DBN_fitted))
     stop("ERROR: DBN_fitted argument is not of class 'dbn.fit'")
-  BN_0_fitted <-
-    DBN_fitted[quanteda::char_select(names(DBN_fitted), "*0", valuetype = "glob")]
+  # G_0 nodes end in _<digits> (var_0, var_1, ...); this captures every initial
+  # slice when extend_g0 = TRUE, unlike the glob "*0" which only matched var_0.
+  # Transition nodes (var_t) and lagged parent refs (var_t-i) are not matched.
+  g0_names <- grep("_[0-9]+$", names(DBN_fitted), value = TRUE)
+  BN_0_fitted <- DBN_fitted[g0_names]
   BN_0_fitted = redefine_class(BN_0_fitted)
   BN_0_fitted
 }
@@ -153,7 +166,7 @@ from_fitted_DBN_to_fitted_G_transition <- function(DBN_fitted) {
   if (!is.dbn.fit(DBN_fitted))
     stop("ERROR: DBN_fitted argument is not of class 'dbn.fit'")
   BN_transition_fitted <-
-    DBN_fitted[quanteda::char_select(names(DBN_fitted), "*t", valuetype = "glob")]
+    DBN_fitted[grep("_t$", names(DBN_fitted), value = TRUE)]
   BN_transition_fitted = redefine_class(BN_transition_fitted)
   BN_transition_fitted
 }

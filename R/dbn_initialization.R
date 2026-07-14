@@ -15,25 +15,26 @@
 empty.dbn <- function(dynamic_nodes, markov_order, static_nodes = c()) {
   if (is.null(static_nodes)) {
     if (length(intersect(static_nodes, dynamic_nodes)) != 0) {
-      stop('A node could not be both Static and Dynamic!!!')
+      stop("A node could not be both Static and Dynamic!!!")
     }
   }
   if (markov_order < 1) {
-    stop('Markov order of the process must be 1 or higher!!!')
+    stop("Markov order of the process must be 1 or higher!!!")
   }
 
-  blacklist = blacklist_g0_gt(sapply(dynamic_nodes, concat_name_post, postfix = "_0"),
-                              sapply(dynamic_nodes, concat_name_post, postfix = "_t"),
-                              markov_order = markov_order,
-                              static_nodes = sapply(static_nodes, concat_name_post, postfix = "_0"))
+  blacklist <- blacklist_g0_gt(sapply(dynamic_nodes, concat_name_post, postfix = "_0"),
+    sapply(dynamic_nodes, concat_name_post, postfix = "_t"),
+    markov_order = markov_order,
+    static_nodes = sapply(static_nodes, concat_name_post, postfix = "_0")
+  )
 
   DBN <- list(
     learning = list(
       whitelist = NULL,
       blacklist = blacklist,
-      test = 'none',
+      test = "none",
       ntests = 0,
-      algo = 'empty',
+      algo = "empty",
       args = list()
     ),
     markov_order = markov_order,
@@ -46,17 +47,17 @@ empty.dbn <- function(dynamic_nodes, markov_order, static_nodes = c()) {
     nodes = list()
   )
 
-  dyn_details <- list(type = 'Dynamic', 't_0' = empty_node_details())
+  dyn_details <- list(type = "Dynamic", "t_0" = empty_node_details())
   for (i in 0:markov_order) {
-    key <- if (i == 0) 't' else paste0('t-', i)
+    key <- if (i == 0) "t" else paste0("t-", i)
     dyn_details[[key]] <- empty_node_details()
   }
   for (i in dynamic_nodes) {
     DBN$nodes[[i]] <- dyn_details
   }
   for (i in static_nodes) {
-    DBN$nodes[[i]][['type']] <- 'Static'
-    DBN$nodes[[i]][['t_0']] <- empty_node_details()
+    DBN$nodes[[i]][["type"]] <- "Static"
+    DBN$nodes[[i]][["t_0"]] <- empty_node_details()
   }
   class(DBN) <- "dbn"
   DBN
@@ -74,29 +75,29 @@ empty.dbn <- function(dynamic_nodes, markov_order, static_nodes = c()) {
 #' @export
 #'
 #' @examples
-#' DBN_example <- add.node.dbn(DBN=DBN_example, node="F", type='Dynamic')
-#' DBN_example <- add.node.dbn(DBN=DBN_example, node="K", type='Static')
-add.node.dbn <- function(DBN, node, type = 'Dynamic') {
-  if (!class(DBN) == 'dbn')
+#' DBN_example <- add.node.dbn(DBN = DBN_example, node = "F", type = "Dynamic")
+#' DBN_example <- add.node.dbn(DBN = DBN_example, node = "K", type = "Static")
+add.node.dbn <- function(DBN, node, type = "Dynamic") {
+  if (!class(DBN) == "dbn") {
     stop("ERROR: DBN argument is not of class 'dbn'")
-  if (!is.character(node))
+  }
+  if (!is.character(node)) {
     stop("ERROR: node is not a character")
+  }
   if (node %in% names(DBN$nodes)) {
     stop("ERROR: node name already exists")
   }
-  if (type == 'Dynamic') {
-    dyn_details <- list(type = 'Dynamic', 't_0' = empty_node_details())
+  if (type == "Dynamic") {
+    dyn_details <- list(type = "Dynamic", "t_0" = empty_node_details())
     for (i in 0:DBN$markov_order) {
-      key <- if (i == 0) 't' else paste0('t-', i)
+      key <- if (i == 0) "t" else paste0("t-", i)
       dyn_details[[key]] <- empty_node_details()
     }
     DBN$nodes[[node]] <- dyn_details
-  }
-  else if (type == 'Static') {
-    DBN$nodes[[node]][['type']] <- 'Static'
-    DBN$nodes[[node]][['t_0']] <- empty_node_details()
-  }
-  else{
+  } else if (type == "Static") {
+    DBN$nodes[[node]][["type"]] <- "Static"
+    DBN$nodes[[node]][["t_0"]] <- empty_node_details()
+  } else {
     stop("ERROR: type must be 'Dynamic' or 'Static")
   }
   DBN
@@ -108,59 +109,69 @@ add.node.dbn <- function(DBN, node, type = 'Dynamic') {
 # Validates an add.arc.dbn call and returns the canonical from/to ids.
 # Stops with the appropriate error otherwise.
 validate_arc_DBN <- function(DBN, from, to) {
-  if (!class(DBN) == 'dbn')
+  if (!class(DBN) == "dbn") {
     stop("ERROR: DBN argument is not of class 'dbn'")
-  if (!is.character(from))
+  }
+  if (!is.character(from)) {
     stop("ERROR: from is not a character")
-  if (!is.character(to))
+  }
+  if (!is.character(to)) {
     stop("ERROR: to is not a character")
+  }
   if (!(length(from) == 2 & length(to) == 2)) {
     stop("ERROR: from and to must be vectors of type (variable, time)")
   }
   if (!(from[1] %in% names(DBN$nodes) &
-        to[1] %in% names(DBN$nodes))) {
+    to[1] %in% names(DBN$nodes))) {
     stop("ERROR: Defined node not in DBN!!!")
   }
   if ((from[1] == to[1] & from[2] == to[2])) {
     stop("ERROR: The arc defines a loop!!!")
   }
 
-  if (to[2] == 't_0') {
-    if (from[2] != 't_0') {
-      stop("ERROR: Prior arcs must be between nodes at 't_0'")
+  if (grepl("^t_[0-9]+$", to[2])) {
+    # Prior arc: the child lives in G_0, which (when markov_order >= 2) spans the
+    # initial slices t_0, t_1, ..., t_(markov_order - 1). Both endpoints must be
+    # G_0 slices below the Markov order.
+    if (as.integer(sub("^t_", "", to[2])) >= DBN$markov_order) {
+      stop("ERROR: G_0 slices must be lower than the Markov Order")
     }
-    from_ <- node_id(from[1], 't_0')
-    to_ <- node_id(to[1], 't_0')
-  }
-  else if (to[2] == 't') {
+    if (!grepl("^t_[0-9]+$", from[2])) {
+      stop("ERROR: Prior arcs must be between nodes in G_0 (t_0, t_1, ...)")
+    }
+    if (as.integer(sub("^t_", "", from[2])) >= DBN$markov_order) {
+      stop("ERROR: G_0 slices must be lower than the Markov Order")
+    }
+    from_ <- node_id(from[1], from[2])
+    to_ <- node_id(to[1], to[2])
+  } else if (to[2] == "t") {
     if (!is_valid_parent_time(from[2])) {
       stop("ERROR: Parent nodes in DBN must be at time 't_0', 't' or 't-k' (with k <= Markov Order)")
     }
-    if (from[2] != 't' &
-        as.numeric(substring(from[2], 3)) > DBN$markov_order) {
+    if (from[2] != "t" &
+      as.numeric(substring(from[2], 3)) > DBN$markov_order) {
       stop("ERROR: Transition arcs could not be of order higher than DBN's Markov Order")
     }
     from_ <- node_id(from[1], from[2])
     to_ <- node_id(to[1], to[2])
-  }
-  else{
-    stop("ERROR: Children nodes in DBN must be at time 't' or 't_0'")
+  } else {
+    stop("ERROR: Children nodes in DBN must be at time 't' or in G_0 (t_0, t_1, ...)")
   }
 
-  if ((DBN[['nodes']][[from[1]]][['type']] == 'Dynamic' &
-       DBN[['nodes']][[to[1]]][['type']] == 'Static')) {
+  if ((DBN[["nodes"]][[from[1]]][["type"]] == "Dynamic" &
+    DBN[["nodes"]][[to[1]]][["type"]] == "Static")) {
     stop("ERROR: A Dynamic Node could not be parent of a Static Node!!!")
   }
 
-  if ((from[2] != 't_0' &
-       DBN[['nodes']][[from[1]]][['type']] == 'Static')) {
+  if ((from[2] != "t_0" &
+    DBN[["nodes"]][[from[1]]][["type"]] == "Static")) {
     stop(
       "ERROR: Static Node have not order higher than 0, thus they are not included in transition arcs!!!"
     )
   }
 
-  if ((to[2] != 't_0' &
-       DBN[['nodes']][[to[1]]][['type']] == 'Static')) {
+  if ((to[2] != "t_0" &
+    DBN[["nodes"]][[to[1]]][["type"]] == "Static")) {
     stop(
       "ERROR: Static Node have not order higher than 0, thus they are not included in transition arcs!!!"
     )
@@ -173,14 +184,14 @@ validate_arc_DBN <- function(DBN, from, to) {
 # cycle. Stops with the cycle error if so. Mirrors the behavior of the original
 # inline check (which has no visited-set; preserved unchanged).
 check_arc_cycle_DBN <- function(DBN, from, to) {
-  if (identical(DBN[['nodes']][[from[1]]][[from[2]]][['parents']], character(0)) ||
-      identical(DBN[['nodes']][[to[1]]][[to[2]]][['children']], character(0))) {
+  if (identical(DBN[["nodes"]][[from[1]]][[from[2]]][["parents"]], character(0)) ||
+    identical(DBN[["nodes"]][[to[1]]][[to[2]]][["children"]], character(0))) {
     return(invisible(NULL))
   }
-  chi <- DBN[['nodes']][[to[1]]][[to[2]]][['children']]
+  chi <- DBN[["nodes"]][[to[1]]][[to[2]]][["children"]]
   s <- TRUE
   while (s) {
-    parents_from <- DBN[['nodes']][[from[1]]][[from[2]]][['parents']]
+    parents_from <- DBN[["nodes"]][[from[1]]][[from[2]]][["parents"]]
     overlap <- intersect(parents_from, chi)
     if (!identical(overlap, character(0)) & !is.null(overlap)) {
       stop("ERROR: The arc create a cycle!!!")
@@ -188,7 +199,7 @@ check_arc_cycle_DBN <- function(DBN, from, to) {
     chi1 <- c()
     for (j in chi) {
       pj <- parse_node_id(j)
-      chi1 <- c(chi1, DBN[['nodes']][[pj$name]][[pj$time]][['children']])
+      chi1 <- c(chi1, DBN[["nodes"]][[pj$name]][[pj$time]][["children"]])
     }
     chi <- chi1
     if (identical(chi, character(0)) | is.null(chi)) {
@@ -202,37 +213,46 @@ check_arc_cycle_DBN <- function(DBN, from, to) {
 # nodes, propagates Markov-blanket entries from existing parents of `to`, and
 # appends the row to DBN$arcs.
 record_arc_DBN <- function(DBN, from, to, from_id, to_id) {
-  if (to_id %in% DBN[['nodes']][[from[1]]][[from[2]]][['children']]) {
+  # Extended-G_0 slices (t_1, ..., t_(markov_order - 1)) are created on demand:
+  # initialize them with empty details so children/parents/nbr/mb are all
+  # character(0) rather than NULL before the arc is recorded.
+  if (is.null(DBN[["nodes"]][[from[1]]][[from[2]]])) {
+    DBN[["nodes"]][[from[1]]][[from[2]]] <- empty_node_details()
+  }
+  if (is.null(DBN[["nodes"]][[to[1]]][[to[2]]])) {
+    DBN[["nodes"]][[to[1]]][[to[2]]] <- empty_node_details()
+  }
+  if (to_id %in% DBN[["nodes"]][[from[1]]][[from[2]]][["children"]]) {
     return(DBN)
   }
-  DBN[['nodes']][[from[1]]][[from[2]]][['children']] <-
-    c(DBN[['nodes']][[from[1]]][[from[2]]][['children']], to_id)
-  DBN[['nodes']][[to[1]]][[to[2]]][['parents']] <-
-    c(DBN[['nodes']][[to[1]]][[to[2]]][['parents']], from_id)
-  if (!to_id %in% DBN[['nodes']][[from[1]]][[from[2]]][['nbr']]) {
-    DBN[['nodes']][[from[1]]][[from[2]]][['nbr']] <-
-      c(DBN[['nodes']][[from[1]]][[from[2]]][['nbr']], to_id)
-    DBN[['nodes']][[to[1]]][[to[2]]][['nbr']] <-
-      c(DBN[['nodes']][[to[1]]][[to[2]]][['nbr']], from_id)
+  DBN[["nodes"]][[from[1]]][[from[2]]][["children"]] <-
+    c(DBN[["nodes"]][[from[1]]][[from[2]]][["children"]], to_id)
+  DBN[["nodes"]][[to[1]]][[to[2]]][["parents"]] <-
+    c(DBN[["nodes"]][[to[1]]][[to[2]]][["parents"]], from_id)
+  if (!to_id %in% DBN[["nodes"]][[from[1]]][[from[2]]][["nbr"]]) {
+    DBN[["nodes"]][[from[1]]][[from[2]]][["nbr"]] <-
+      c(DBN[["nodes"]][[from[1]]][[from[2]]][["nbr"]], to_id)
+    DBN[["nodes"]][[to[1]]][[to[2]]][["nbr"]] <-
+      c(DBN[["nodes"]][[to[1]]][[to[2]]][["nbr"]], from_id)
   }
-  if (!to_id %in% DBN[['nodes']][[from[1]]][[from[2]]][['mb']]) {
-    DBN[['nodes']][[from[1]]][[from[2]]][['mb']] <-
-      c(DBN[['nodes']][[from[1]]][[from[2]]][['mb']], to_id)
-    DBN[['nodes']][[to[1]]][[to[2]]][['mb']] <-
-      c(DBN[['nodes']][[to[1]]][[to[2]]][['mb']], from_id)
+  if (!to_id %in% DBN[["nodes"]][[from[1]]][[from[2]]][["mb"]]) {
+    DBN[["nodes"]][[from[1]]][[from[2]]][["mb"]] <-
+      c(DBN[["nodes"]][[from[1]]][[from[2]]][["mb"]], to_id)
+    DBN[["nodes"]][[to[1]]][[to[2]]][["mb"]] <-
+      c(DBN[["nodes"]][[to[1]]][[to[2]]][["mb"]], from_id)
   }
-  if (!is.na(DBN$arcs[DBN$arcs[, 'to'] == to_id, ]['from'])) {
-    for (i in DBN$arcs[DBN$arcs[, 'to'] == to_id, ]['from']) {
+  if (!is.na(DBN$arcs[DBN$arcs[, "to"] == to_id, ]["from"])) {
+    for (i in DBN$arcs[DBN$arcs[, "to"] == to_id, ]["from"]) {
       pi <- parse_node_id(i)
-      if (!i %in% DBN[['nodes']][[from[1]]][[pi$time]][['mb']]) {
-        DBN[['nodes']][[from[1]]][[from[2]]][['mb']] <-
-          c(DBN[['nodes']][[from[1]]][[from[2]]][['mb']], i)
-        DBN[['nodes']][[pi$name]][[pi$time]][['mb']] <-
-          c(DBN[['nodes']][[pi$name]][[pi$time]][['mb']], from_id)
+      if (!i %in% DBN[["nodes"]][[from[1]]][[pi$time]][["mb"]]) {
+        DBN[["nodes"]][[from[1]]][[from[2]]][["mb"]] <-
+          c(DBN[["nodes"]][[from[1]]][[from[2]]][["mb"]], i)
+        DBN[["nodes"]][[pi$name]][[pi$time]][["mb"]] <-
+          c(DBN[["nodes"]][[pi$name]][[pi$time]][["mb"]], from_id)
       }
     }
   }
-  DBN[['arcs']] <- rbind(DBN$arcs, c(from_id, to_id))
+  DBN[["arcs"]] <- rbind(DBN$arcs, c(from_id, to_id))
   DBN
 }
 
@@ -247,9 +267,9 @@ record_arc_DBN <- function(DBN, from, to, from_id, to_id) {
 #' @export
 #'
 #' @examples
-#' DBN_example <- add.arc.dbn(DBN=DBN_example,from=c('A','t_0'),to=c('R','t_0'))
-#' DBN_example <- add.arc.dbn(DBN=DBN_example,from=c('S','t'),to=c('O','t'))
-#' DBN_example <- add.arc.dbn(DBN=DBN_example,from=c('S','t-1'),to=c('S','t'))
+#' DBN_example <- add.arc.dbn(DBN = DBN_example, from = c("A", "t_0"), to = c("R", "t_0"))
+#' DBN_example <- add.arc.dbn(DBN = DBN_example, from = c("S", "t"), to = c("O", "t"))
+#' DBN_example <- add.arc.dbn(DBN = DBN_example, from = c("S", "t-1"), to = c("S", "t"))
 add.arc.dbn <- function(DBN, from, to, cycle_OK = TRUE) {
   ids <- validate_arc_DBN(DBN, from, to)
   if (cycle_OK == FALSE) {
@@ -271,53 +291,54 @@ add.arc.dbn <- function(DBN, from, to, cycle_OK = TRUE) {
 #' @export
 #'
 #' @examples
-#' DBN_example <- delete.arc.dbn(DBN=DBN_example,from=c('A','t_0'),to=c('R','t_0'))
-#' DBN_example <- delete.arc.dbn(DBN=DBN_example,from=c('S','t'),to=c('O','t'))
-#' DBN_example <- delete.arc.dbn(DBN=DBN_example,from=c('S','t-1'),to=c('S','t'))
+#' DBN_example <- delete.arc.dbn(DBN = DBN_example, from = c("A", "t_0"), to = c("R", "t_0"))
+#' DBN_example <- delete.arc.dbn(DBN = DBN_example, from = c("S", "t"), to = c("O", "t"))
+#' DBN_example <- delete.arc.dbn(DBN = DBN_example, from = c("S", "t-1"), to = c("S", "t"))
 delete.arc.dbn <- function(DBN, from, to) {
-  if (!class(DBN) == 'dbn')
+  if (!class(DBN) == "dbn") {
     stop("Error: DBN argument is not of class 'dbn'")
-  if (!is.character(from))
+  }
+  if (!is.character(from)) {
     stop("Error: from is not a character")
-  if (!is.character(to))
+  }
+  if (!is.character(to)) {
     stop("Error: to is not a character")
+  }
   from_ <- node_id(from[1], from[2])
   to_ <- node_id(to[1], to[2])
-  if (to_ %in% DBN[['nodes']][[from[1]]][[from[2]]][['children']]) {
-    DBN[['arcs']] <- delete_arc_element(DBN$arcs, c(from_, to_))
-    DBN[['nodes']][[from[1]]][[from[2]]][['children']] <-
-      delete_arc_element(DBN[['nodes']][[from[1]]][[from[2]]][['children']], to_)
-    DBN[['nodes']][[to[1]]][[to[2]]][['parents']] <-
-      delete_arc_element(DBN[['nodes']][[to[1]]][[to[2]]][['parents']], from_)
-    if (!to_ %in% DBN[['nodes']][[from[1]]][[from[2]]][['parents']]) {
-      DBN[['nodes']][[from[1]]][[from[2]]][['nbr']] <-
-        delete_arc_element(DBN[['nodes']][[from[1]]][[from[2]]][['nbr']], to_)
-      DBN[['nodes']][[to[1]]][[to[2]]][['nbr']] <-
-        delete_arc_element(DBN[['nodes']][[to[1]]][[to[2]]][['nbr']], from_)
-      DBN[['nodes']][[from[1]]][[from[2]]][['mb']] <-
-        delete_arc_element(DBN[['nodes']][[from[1]]][[from[2]]][['mb']], to_)
-      DBN[['nodes']][[to[1]]][[to[2]]][['mb']] <-
-        delete_arc_element(DBN[['nodes']][[to[1]]][[to[2]]][['mb']], from_)
+  if (to_ %in% DBN[["nodes"]][[from[1]]][[from[2]]][["children"]]) {
+    DBN[["arcs"]] <- delete_arc_element(DBN$arcs, c(from_, to_))
+    DBN[["nodes"]][[from[1]]][[from[2]]][["children"]] <-
+      delete_arc_element(DBN[["nodes"]][[from[1]]][[from[2]]][["children"]], to_)
+    DBN[["nodes"]][[to[1]]][[to[2]]][["parents"]] <-
+      delete_arc_element(DBN[["nodes"]][[to[1]]][[to[2]]][["parents"]], from_)
+    if (!to_ %in% DBN[["nodes"]][[from[1]]][[from[2]]][["parents"]]) {
+      DBN[["nodes"]][[from[1]]][[from[2]]][["nbr"]] <-
+        delete_arc_element(DBN[["nodes"]][[from[1]]][[from[2]]][["nbr"]], to_)
+      DBN[["nodes"]][[to[1]]][[to[2]]][["nbr"]] <-
+        delete_arc_element(DBN[["nodes"]][[to[1]]][[to[2]]][["nbr"]], from_)
+      DBN[["nodes"]][[from[1]]][[from[2]]][["mb"]] <-
+        delete_arc_element(DBN[["nodes"]][[from[1]]][[from[2]]][["mb"]], to_)
+      DBN[["nodes"]][[to[1]]][[to[2]]][["mb"]] <-
+        delete_arc_element(DBN[["nodes"]][[to[1]]][[to[2]]][["mb"]], from_)
+    } else if (identical(intersect(DBN[["nodes"]][[from[1]]][[from[2]]][["children"]], DBN[["nodes"]][[to[1]]][[to[2]]][["children"]]), character(0))) {
+      DBN[["nodes"]][[from[1]]][[from[2]]][["mb"]] <-
+        delete_arc_element(DBN[["nodes"]][[from[1]]][[from[2]]][["mb"]], to_)
+      DBN[["nodes"]][[to[1]]][[to[2]]][["mb"]] <-
+        delete_arc_element(DBN[["nodes"]][[to[1]]][[to[2]]][["mb"]], from_)
     }
-    else if (identical(intersect(DBN[['nodes']][[from[1]]][[from[2]]][['children']], DBN[['nodes']][[to[1]]][[to[2]]][['children']]), character(0))) {
-      DBN[['nodes']][[from[1]]][[from[2]]][['mb']] <-
-        delete_arc_element(DBN[['nodes']][[from[1]]][[from[2]]][['mb']], to_)
-      DBN[['nodes']][[to[1]]][[to[2]]][['mb']] <-
-        delete_arc_element(DBN[['nodes']][[to[1]]][[to[2]]][['mb']], from_)
-    }
-    if (!identical(DBN[['nodes']][[to[1]]][[to[2]]][['parents']], character(0))) {
-      for (i in DBN[['nodes']][[to[1]]][[to[2]]][['parents']]) {
+    if (!identical(DBN[["nodes"]][[to[1]]][[to[2]]][["parents"]], character(0))) {
+      for (i in DBN[["nodes"]][[to[1]]][[to[2]]][["parents"]]) {
         pi <- parse_node_id(i)
-        if (identical(intersect(DBN[['nodes']][[from[1]]][[from[2]]][['children']], DBN[['nodes']][[pi$name]][[pi$time]][['children']]), character(0))) {
-          DBN[['nodes']][[from[1]]][[from[2]]][['mb']] <-
-            delete_arc_element(DBN[['nodes']][[from[1]]][[from[2]]][['mb']], i)
-          DBN[['nodes']][[pi$name]][[pi$time]][['mb']] <-
-            delete_arc_element(DBN[['nodes']][[pi$name]][[pi$time]][['mb']], from_)
+        if (identical(intersect(DBN[["nodes"]][[from[1]]][[from[2]]][["children"]], DBN[["nodes"]][[pi$name]][[pi$time]][["children"]]), character(0))) {
+          DBN[["nodes"]][[from[1]]][[from[2]]][["mb"]] <-
+            delete_arc_element(DBN[["nodes"]][[from[1]]][[from[2]]][["mb"]], i)
+          DBN[["nodes"]][[pi$name]][[pi$time]][["mb"]] <-
+            delete_arc_element(DBN[["nodes"]][[pi$name]][[pi$time]][["mb"]], from_)
         }
       }
     }
-  }
-  else{
+  } else {
     stop("ERROR: Arc do not exists!!!")
   }
   DBN
@@ -336,21 +357,25 @@ delete.arc.dbn <- function(DBN, from, to) {
 #' @export
 #'
 #' @examples
-#' DBN_example <- add.arc.dbn(DBN=DBN_example,from=c('A','t-1'),to=c('R','t'))
+#' DBN_example <- add.arc.dbn(DBN = DBN_example, from = c("A", "t-1"), to = c("R", "t"))
 reverse.arc.dbn <- function(DBN, from, to, cycle_OK = TRUE) {
-  if (!class(DBN) == 'dbn')
+  if (!class(DBN) == "dbn") {
     stop("Error: DBN argument is not of class 'dbn'")
-  if (!is.character(from))
+  }
+  if (!is.character(from)) {
     stop("Error: from is not a character")
-  if (!is.character(to))
+  }
+  if (!is.character(to)) {
     stop("Error: to is not a character")
+  }
   from_ <- node_id(from[1], from[2])
   to_ <- node_id(to[1], to[2])
-  if (!(to_ %in% DBN[['nodes']][[from[1]]][[from[2]]][['children']])) {
+  if (!(to_ %in% DBN[["nodes"]][[from[1]]][[from[2]]][["children"]])) {
     stop("ERROR: An arc that does not exist could not be reversed!!!")
   }
-  if (any(apply(DBN$learning$blacklist, 1, function(x)
-    (x[['from']] == to_ & x[['to']] == from_)))) {
+  if (any(apply(DBN$learning$blacklist, 1, function(x) {
+    (x[["from"]] == to_ & x[["to"]] == from_)
+  }))) {
     stop("ERROR: Temporal arcs are irreversible in DBNs!!!")
   }
   DBN <-

@@ -22,7 +22,7 @@ object of class 'dbn'
 Function for arc deletion in Dynamic Bayesian Network
 }
 \examples{
-DBN_example <- delete.arc.dbn(DBN=DBN_example,from=c('A','t_0'),to=c('R','t_0'))
-DBN_example <- delete.arc.dbn(DBN=DBN_example,from=c('S','t'),to=c('O','t'))
-DBN_example <- delete.arc.dbn(DBN=DBN_example,from=c('S','t-1'),to=c('S','t'))
+DBN_example <- delete.arc.dbn(DBN = DBN_example, from = c("A", "t_0"), to = c("R", "t_0"))
+DBN_example <- delete.arc.dbn(DBN = DBN_example, from = c("S", "t"), to = c("O", "t"))
+DBN_example <- delete.arc.dbn(DBN = DBN_example, from = c("S", "t-1"), to = c("S", "t"))
 }

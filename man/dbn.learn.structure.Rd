@@ -15,6 +15,7 @@ dbn.learn.structure(
   test = NULL,
   score = NULL,
   max.sx = NULL,
+  extend_g0 = TRUE,
   ...
 )
 }
@@ -37,6 +38,8 @@ dbn.learn.structure(
 
 \item{max.sx}{an integer, the maximum number of parents for each node (default is no limit)}
 
+\item{extend_g0}{= TRUE bool whether to include in G_0 nodes with time < markov_order. If false G_0 will only have _0 nodes}
+
 \item{...}{additional parameters of the scoring function and/or chosen test}
 
 \item{markov_oder}{an integer refering to the markov order of the learning algorithm}
@@ -48,8 +51,8 @@ An object of class 'dbn', which is a DBN learned via 2-phase Restricted Maximiza
 Structure Learning function for Dynamic Bayesian Networks
 }
 \examples{
-DBN <- random.structure.dbn(c("A","B","C"), 0.5, 0.5, markov_order = 1)
-DBN_fitted <- generate_dbn_nodes_distributions(DBN,c("A","B","C"), TRUE, 2)
+DBN <- random.structure.dbn(c("A", "B", "C"), 0.5, 0.5, markov_order = 1)
+DBN_fitted <- generate_dbn_nodes_distributions(DBN, c("A", "B", "C"), TRUE, 2)
 data <- dbn_sampling(DBN_fitted, 2000, 5)
-dbn.learn.structure(data, algorithm='h2pc',score='aic') 
+dbn.learn.structure(data, algorithm = "h2pc", score = "aic")
 }

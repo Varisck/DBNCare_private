@@ -10,7 +10,8 @@ blacklist_g0_gt(
   markov_order = 1,
   static_nodes = c(),
   allow_intraslice_edges = TRUE,
-  allow_t_0_edges = TRUE
+  allow_t_0_edges = TRUE,
+  extend_g0 = TRUE
 )
 }
 \arguments{

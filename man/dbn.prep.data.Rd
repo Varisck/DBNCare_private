@@ -10,7 +10,8 @@ dbn.prep.data(
   blacklist = NULL,
   whitelist = NULL,
   allow_intraslice_edges = TRUE,
-  allow_t_0_edges = TRUE
+  allow_t_0_edges = TRUE,
+  extend_g0 = TRUE
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ dbn.prep.data(
 \item{allow_intraslice_edges}{= TRUE bool wether to allow edges of the form X_t -> Y_t}
 
 \item{allow_t_0_edges}{= TRUE bool wether to allow edges of the form X_0 -> Y_0}
+
+\item{extend_g0}{= TRUE bool weather to include in G_0 nodes with time < markov_order. If false G_0 will only have _0 nodes}
 }
 \value{
 character vector made of ordered data to fit G_0, data to fit G_transition, blacklist to fit G_0, blacklist to fit G_transition, whitelist to fit G_0, whitelist to fit G_transition
@@ -33,8 +36,8 @@ character vector made of ordered data to fit G_0, data to fit G_transition, blac
 Preprocessing function for Structure Learning algorithm.
 }
 \examples{
-DBN <- random.structure.dbn(c("A","B","C"), 0.5, 0.5, markov_order = 1)
-DBN_fitted <- generate_dbn_nodes_distributions(DBN,c("A","B","C"), TRUE, 2)
+DBN <- random.structure.dbn(c("A", "B", "C"), 0.5, 0.5, markov_order = 1)
+DBN_fitted <- generate_dbn_nodes_distributions(DBN, c("A", "B", "C"), TRUE, 2)
 data <- dbn_sampling(DBN_fitted, 2000, 5)
 dbn.prep.data(data)
 }

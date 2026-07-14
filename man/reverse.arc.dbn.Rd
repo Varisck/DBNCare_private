@@ -22,5 +22,5 @@ object of class 'dbn'
 Function for arc reversal in Dynamic Bayesian Network
 }
 \examples{
-DBN_example <- add.arc.dbn(DBN=DBN_example,from=c('A','t-1'),to=c('R','t'))
+DBN_example <- add.arc.dbn(DBN = DBN_example, from = c("A", "t-1"), to = c("R", "t"))
 }

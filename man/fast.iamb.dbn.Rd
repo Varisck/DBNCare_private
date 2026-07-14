@@ -11,6 +11,7 @@ fast.iamb.dbn(
   max.sx = NULL,
   blacklist = NULL,
   whitelist = NULL,
+  extend_g0 = TRUE,
   ...
 )
 }
@@ -25,6 +26,8 @@ fast.iamb.dbn(
 
 \item{whitelist}{a matrix with columns 'from' and 'to' defining the set of arcs that are fixed}
 
+\item{extend_g0}{= TRUE bool whether to include in G_0 nodes with time < markov_order. If false G_0 will only have _0 nodes}
+
 \item{...}{additional parameters for the chosen test}
 
 \item{markov_oder}{an integer refering to the markov order of the learning algorithm}
@@ -36,8 +39,8 @@ An object of class 'dbn', which is a DBN learned via Fast Incremental Associatio
 Learn the equivalence class of DBN via Fast Incremental Association algorithm
 }
 \examples{
-DBN <- random.structure.dbn(c("A","B","C"), 0.5, 0.5, markov_order = 1)
-DBN_fitted <- generate_dbn_nodes_distributions(DBN,c("A","B","C"), TRUE, 2)
+DBN <- random.structure.dbn(c("A", "B", "C"), 0.5, 0.5, markov_order = 1)
+DBN_fitted <- generate_dbn_nodes_distributions(DBN, c("A", "B", "C"), TRUE, 2)
 data <- dbn_sampling(DBN_fitted, 2000, 5)
 fast.iamb.dbn(data)
 
