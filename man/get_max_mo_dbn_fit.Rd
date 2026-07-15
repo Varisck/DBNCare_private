@@ -15,6 +15,15 @@ markov order of the dbn
 \description{
 Return the maximum markov order of a dbn.fit object
 }
+\details{
+The order is the largest lag \eqn{k} among the \code{X_t-k} parents
+of the transition (\code{_t}) nodes. This reads each node's own
+\code{$parents};
+only if that is missing it fall back to recovering the parent names
+from the stored distribution.
+It also takes the extended \eqn{G_0} slices (\code{var_0, var_1, ...}) into
+account: their highest index implies an order of at least \code{index + 1}.
+}
 \examples{
 mo <- get_max_mo_dbn_fit(fit)
 }

@@ -173,31 +173,56 @@ blacklist_g0_gt = function(g_0_nodes, g_t_nodes, markov_order = 1,
 #' Return the maximum markov order of a dbn.fit object
 #'
 #' @param dbn an object of class dbn.fit
-#' 
+#'
 #' @returns markov order of the dbn
 #' @export
-#' 
+#'
+#' @details The order is the largest lag \eqn{k} among the \code{X_t-k} parents
+#'   of the transition (\code{_t}) nodes. This reads each node's own
+#'   \code{$parents}; 
+#'   only if that is missing it fall back to recovering the parent names 
+#'   from the stored distribution.
+#'   It also takes the extended \eqn{G_0} slices (\code{var_0, var_1, ...}) into
+#'   account: their highest index implies an order of at least \code{index + 1}.
+#'
 #' @examples
 #' mo <- get_max_mo_dbn_fit(fit)
 get_max_mo_dbn_fit = function(dbn) {
   if(!is.dbn.fit(dbn))
     stop("get_max_mo_dbn_fit input object is not a dbn.fit")
-  nodes_t = get_nodes_t(remove_prev_time_from_bn_fit(dbn))
+
   mx = 0
+
+  # G_0: extended initial slices are named var_0, var_1, ..., var_(mo - 1), so the
+  # highest index present implies a Markov order of at least (index + 1).
+  g0_names = grep("_[0-9]+$", names(dbn), value = TRUE)
+  if(length(g0_names) > 0)
+    mx = max(mx, max(as.integer(sub(".*_([0-9]+)$", "\\1", g0_names))) + 1L)
+
+  # G_transition: largest lag among the parents of the _t nodes. Prefer the node's
+  # own $parents (present for every node type); only fall back to reading the
+  # parent names out of the stored distribution (dispatching on the node type)
+  # when $parents is absent.
+  nodes_t = get_nodes_t(remove_prev_time_from_bn_fit(dbn))
   for(n in nodes_t) {
-    if("prob" %in% names(dbn[[n]])) {
-      regnames = names(dimnames(dbn[[n]]$prob))
+    node = dbn[[n]]
+    if(!is.null(node$parents)) {
+      parents = node$parents
+    } else if(is.dnode(node)) {
+      parents = names(dimnames(node$prob))                                # node + discrete parents
+    } else if(is.gnode(node)) {
+      parents = setdiff(names(node$regs), intercept_name)                 # gaussian parents
+    } else if(is.cgnode(node)) {
+      parents = c(setdiff(rownames(node$coefficients), intercept_name),   # gaussian parents
+                  names(node$dlevels))                                    # discrete parents
     } else {
-      regnames = names(dbn[[n]]$regs)
-      if(length(regnames) > 1) regnames = regnames[2:length(regnames)]
-      else regnames = character(0)
+      stop(paste("get_max_mo_dbn_fit: unrecognized node type for node", n))
     }
-    lagged = regnames[grepl("t-[0-9]+$", regnames)]
-    if(length(lagged) > 0) {
-      tl = as.double(sub(".*t-([0-9]+)$", "\\1", lagged))
-      mx = max(mx, max(tl))
-    }
+    lagged = parents[grepl("t-[0-9]+$", parents)]
+    if(length(lagged) > 0)
+      mx = max(mx, max(as.double(sub(".*t-([0-9]+)$", "\\1", lagged))))
   }
+
   mx
 }
 
