@@ -1,5 +1,5 @@
 #first step: a random dbn with 5 nodes
-library(DynamicBayesianNetwork)
+library(DBNCare)
 library(dplyr)
 
 dbn_at_random<-random.dbn(LETTERS[1:10],TRUE,0.6)

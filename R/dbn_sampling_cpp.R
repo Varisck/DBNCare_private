@@ -226,7 +226,7 @@ plan_all_mix = function(net, ordered_nodes, var_index, levels_list) {
 #' @param max_time time series length
 #' 
 #' @returns the generated dataframe
-#' @useDynLib DynamicBayesianNetwork, .registration = TRUE
+#' @useDynLib DBNCare, .registration = TRUE
 #' @importFrom Rcpp sourceCpp
 #' @export
 #' 

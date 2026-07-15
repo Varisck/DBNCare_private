@@ -1,10 +1,10 @@
 # ![](images/DBNcare.svg){width="177"}
 
-# DBNcare: An R Package for Dynamic Bayesian Networks in Healthcare
+# DBNCare: An R Package for Dynamic Bayesian Networks in Healthcare
 
 ## Introduction
 
-DBNcare package has the aim of creating an open source package for the Dynamic Bayesian Network framework. The current version of the package supports multinomial Dynamic Bayesian Networks with a markov order of 1 and **no missing values**.
+DBNCare package has the aim of creating an open source package for the Dynamic Bayesian Network framework. The current version of the package supports multinomial Dynamic Bayesian Networks with a markov order of 1 and **no missing values**.
 
 ## Current Implemented Features
 
@@ -35,7 +35,7 @@ The following code shows how to create a Dynamic Bayesian Network model. The def
 Once the DBN is defined it can be visualized using the visualization methods.
 
 ```{r}
-library('DynamicBayesianNetwork')
+library('DBNCare')
 library(zeallot)
 ```
 

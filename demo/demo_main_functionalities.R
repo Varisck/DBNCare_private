@@ -1,4 +1,4 @@
-library(DynamicBayesianNetwork)
+library(DBNCare)
 
 # =============================================================================
 # 1. Define a DBN structure manually

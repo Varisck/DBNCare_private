@@ -13,7 +13,7 @@
 if (file.exists("DESCRIPTION") && requireNamespace("pkgload", quietly = TRUE)) {
   pkgload::load_all(".", quiet = TRUE)
 } else {
-  library(DynamicBayesianNetwork)
+  library(DBNCare)
 }
 
 section <- function(title) cat("\n==", title, "==\n")

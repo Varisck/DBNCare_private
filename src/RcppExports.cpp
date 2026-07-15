@@ -12,7 +12,7 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 
 // dbn_sample_gaussian_cpp
 NumericMatrix dbn_sample_gaussian_cpp(int n_samples, int max_time, int n_vars, List plan_0, List plan_t);
-RcppExport SEXP _DynamicBayesianNetwork_dbn_sample_gaussian_cpp(SEXP n_samplesSEXP, SEXP max_timeSEXP, SEXP n_varsSEXP, SEXP plan_0SEXP, SEXP plan_tSEXP) {
+RcppExport SEXP _DBNCare_dbn_sample_gaussian_cpp(SEXP n_samplesSEXP, SEXP max_timeSEXP, SEXP n_varsSEXP, SEXP plan_0SEXP, SEXP plan_tSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -27,7 +27,7 @@ END_RCPP
 }
 // dbn_sample_discrete_cpp
 IntegerMatrix dbn_sample_discrete_cpp(int n_samples, int max_time, int n_vars, IntegerVector n_levels, List plan_0, List plan_t);
-RcppExport SEXP _DynamicBayesianNetwork_dbn_sample_discrete_cpp(SEXP n_samplesSEXP, SEXP max_timeSEXP, SEXP n_varsSEXP, SEXP n_levelsSEXP, SEXP plan_0SEXP, SEXP plan_tSEXP) {
+RcppExport SEXP _DBNCare_dbn_sample_discrete_cpp(SEXP n_samplesSEXP, SEXP max_timeSEXP, SEXP n_varsSEXP, SEXP n_levelsSEXP, SEXP plan_0SEXP, SEXP plan_tSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -43,7 +43,7 @@ END_RCPP
 }
 // dbn_sample_mixed_cpp
 NumericMatrix dbn_sample_mixed_cpp(int n_samples, int max_time, List n_vars, IntegerVector n_levels, List plan_0, List plan_t, List node_ordering_0, List node_ordering_t);
-RcppExport SEXP _DynamicBayesianNetwork_dbn_sample_mixed_cpp(SEXP n_samplesSEXP, SEXP max_timeSEXP, SEXP n_varsSEXP, SEXP n_levelsSEXP, SEXP plan_0SEXP, SEXP plan_tSEXP, SEXP node_ordering_0SEXP, SEXP node_ordering_tSEXP) {
+RcppExport SEXP _DBNCare_dbn_sample_mixed_cpp(SEXP n_samplesSEXP, SEXP max_timeSEXP, SEXP n_varsSEXP, SEXP n_levelsSEXP, SEXP plan_0SEXP, SEXP plan_tSEXP, SEXP node_ordering_0SEXP, SEXP node_ordering_tSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -61,13 +61,13 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_DynamicBayesianNetwork_dbn_sample_gaussian_cpp", (DL_FUNC) &_DynamicBayesianNetwork_dbn_sample_gaussian_cpp, 5},
-    {"_DynamicBayesianNetwork_dbn_sample_discrete_cpp", (DL_FUNC) &_DynamicBayesianNetwork_dbn_sample_discrete_cpp, 6},
-    {"_DynamicBayesianNetwork_dbn_sample_mixed_cpp", (DL_FUNC) &_DynamicBayesianNetwork_dbn_sample_mixed_cpp, 8},
+    {"_DBNCare_dbn_sample_gaussian_cpp", (DL_FUNC) &_DBNCare_dbn_sample_gaussian_cpp, 5},
+    {"_DBNCare_dbn_sample_discrete_cpp", (DL_FUNC) &_DBNCare_dbn_sample_discrete_cpp, 6},
+    {"_DBNCare_dbn_sample_mixed_cpp", (DL_FUNC) &_DBNCare_dbn_sample_mixed_cpp, 8},
     {NULL, NULL, 0}
 };
 
-RcppExport void R_init_DynamicBayesianNetwork(DllInfo *dll) {
+RcppExport void R_init_DBNCare(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }
