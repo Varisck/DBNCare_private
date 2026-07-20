@@ -3,7 +3,7 @@
 #' @param t time point
 #' @param index_n time index of node n
 #' @returns time-point in the series used to retrieve the value of the node n
-#' @export
+#'
 #' @examples
 #' get_time_point(3, 1)
 get_time_point <- function(t, index_n) {
@@ -330,7 +330,7 @@ dbn.forecasting <- function(dbn, observations, timepoints) {
     stop("Parameter type not valid observations must be a list or data.frame")
   }
 
-  markov_order = get_max_mo_dbn_fit(dbn)
+  markov_order = markov_order(dbn)
   
   # maybe here use priors instead of erroring out
   if(length(observations[["Time"]]) < markov_order) {

@@ -250,3 +250,17 @@ plot_g_transition <- function(dbn){
     visNetwork::visEdges(arrows = "to")
   
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+

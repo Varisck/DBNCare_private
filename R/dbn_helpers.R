@@ -170,26 +170,76 @@ blacklist_g0_gt = function(g_0_nodes, g_t_nodes, markov_order = 1,
 }
 
 
-#' Return the maximum markov order of a dbn.fit object
+
+#' Markov order of a network
 #'
-#' @param dbn an object of class dbn.fit
+#' @description
+#' S3 generic returning the Markov order of a DBN, dispatching on the class
+#' of \code{x}. For a \code{dbn} object it is the structural order recorded
+#' at construction time; for a \code{dbn.fit} object it is recovered from the
+#' fitted node parents and the extended \eqn{G_0} slices.
 #'
-#' @returns markov order of the dbn
+#' @param x a network object (\code{dbn}, \code{dbn.fit}).
+#' @param ... further arguments passed to the method.
+#'
+#' @return for \code{dbn} / \code{dbn.fit} a single integer: the Markov order
+#'   of \code{x}.
+#' @export
+markov_order <- function(x, ...) UseMethod("markov_order")
+
+#' Markov order of a network
+#'
+#' @description
+#' S3 generic returning the Markov order of a DBN, dispatching on the class
+#' of \code{x}. For a \code{dbn} object it is the structural order recorded
+#' at construction time; for a \code{dbn.fit} object it is recovered from the
+#' fitted node parents and the extended \eqn{G_0} slices.
+#'
+#' @return for \code{dbn} / \code{dbn.fit} a single integer: the Markov order
+#'   of \code{x}.
+#' @rdname markov_order
+#' @method markov_order dbn
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' dbn <- random.structure.dbn(c("A","B","C"), .5, .5, 1)
+#' markov_order(dbn)
+#' }
+markov_order.dbn <- function(x, ...) x$markov_order
+
+
+
+#' Markov order of a network
+#'
+#' @description
+#' S3 generic returning the Markov order of a DBN, dispatching on the class
+#' of \code{x}. For a \code{dbn} object it is the structural order recorded
+#' at construction time; for a \code{dbn.fit} object it is recovered from the
+#' fitted node parents and the extended \eqn{G_0} slices.
+#'
+#' @return for \code{dbn} / \code{dbn.fit} a single integer: the Markov order
+#'   of \code{x}.
+#' @rdname markov_order
+#' @method markov_order dbn.fit
 #' @export
 #'
 #' @details The order is the largest lag \eqn{k} among the \code{X_t-k} parents
 #'   of the transition (\code{_t}) nodes. This reads each node's own
-#'   \code{$parents}; 
-#'   only if that is missing it fall back to recovering the parent names 
+#'   \code{$parents};
+#'   only if that is missing it fall back to recovering the parent names
 #'   from the stored distribution.
 #'   It also takes the extended \eqn{G_0} slices (\code{var_0, var_1, ...}) into
 #'   account: their highest index implies an order of at least \code{index + 1}.
 #'
 #' @examples
-#' mo <- get_max_mo_dbn_fit(fit)
-get_max_mo_dbn_fit = function(dbn) {
+#' \dontrun{
+#' fit <- fit_random_dbn(random.structure.dbn(c("A","B","C"), .5, .5, 1), "continuous")
+#' mo  <- markov_order(fit)
+#' }
+markov_order.dbn.fit = function(dbn, ...) {
   if(!is.dbn.fit(dbn))
-    stop("get_max_mo_dbn_fit input object is not a dbn.fit")
+    stop("markov_order input object is not a dbn.fit")
 
   mx = 0
 
@@ -216,7 +266,7 @@ get_max_mo_dbn_fit = function(dbn) {
       parents = c(setdiff(rownames(node$coefficients), intercept_name),   # gaussian parents
                   names(node$dlevels))                                    # discrete parents
     } else {
-      stop(paste("get_max_mo_dbn_fit: unrecognized node type for node", n))
+      stop(paste("markov_order: unrecognized node type for node", n))
     }
     lagged = parents[grepl("t-[0-9]+$", parents)]
     if(length(lagged) > 0)
@@ -518,7 +568,7 @@ summary.dbn.fit <- function(object, ...) {
     stop("ERROR: object argument is not of class 'dbn.fit'")
 
   type <- dbn_type(object)
-  mo   <- get_max_mo_dbn_fit(object)
+  mo   <- markov_order(object)
 
   prior_nodes      <- sort(names(object)[grepl("_0$",  names(object))])
   transition_nodes <- sort(names(object)[grepl("_t$",  names(object))])
@@ -644,7 +694,7 @@ modelstring.dbn.fit <- function(dbn, ...) {
   # transition network printed by summary.dbn
   g_t_nodes    <- grep("_t$", names(dbn), value = TRUE)
   variables    <- unique(vapply(g_t_nodes, get_variable_name, character(1)))
-  markov_order <- get_max_mo_dbn_fit(dbn)
+  markov_order <- markov_order(dbn)
   lagged_nodes <- character(0)
   for (k in seq_len(markov_order))
     lagged_nodes <- c(lagged_nodes, paste0(variables, "_t-", k))
@@ -681,3 +731,103 @@ modelstring.dbn <- function(dbn, ...) {
     g_t = if (bnlearn::directed(gt)) bnlearn::modelstring(gt) else "[partially directed graph]"
   )
 }
+
+
+#' Get the adj matrix from a network 
+#'
+#' @description
+#' S3 generic returning a \code{data.frame} with the adjecency matrix of the model,
+#' For a \code{dbn} object it returns a data.frame with 0/1 identifing the edge, 
+#' whereas for a \code{dbn.fit} object it returns 
+#'
+#' @param x a network object (\code{dbn}, \code{dbn.fit}).
+#' @param ... further arguments passed to the method.
+#'
+#' @return for \code{dbn} / \code{dbn.fit} a data.frame 
+#' @export
+adj.matrix <- function(x, ...) UseMethod("adj.matrix")
+
+
+#' Get the adj matrix from a network 
+#'
+#' @description
+#' S3 generic returning a \code{data.frame} with the adjecency matrix of the model,
+#' For a \code{dbn} object it returns a data.frame with 0/1 identifing the edge, 
+#' whereas for a \code{dbn.fit} object it returns 
+#'
+#' @return for \code{dbn} / \code{dbn.fit} a data.frame 
+#' 
+#' @rdname adj.matrix
+#' @method adj.matrix dbn
+#' 
+#' @export 
+#' @examples 
+#' #' \dontrun{
+#' dbn <- random.structure.dbn(c("A","B","C"), .5, .5, 1)
+#' adj.matrix(dbn)
+#' }
+adj.matrix.dbn = function(dbn, ...) {
+  markov_order = dbn$markov_order
+  n_names = names(dbn$nodes)
+  num_nodes = length(n_names)
+
+  adjs = array(0, dim = c(num_nodes, num_nodes, (markov_order + 1)),
+                dimnames = list(from = n_names, to = n_names, 
+                                lag = 0:(markov_order)))
+
+  # filter only transition arcs
+  from = dbn$arcs[, 1][which(arr.ind = T, grepl("_t(-[0-9]*)*$", dbn$arcs[, 1]))]
+  to = dbn$arcs[, 2][which(arr.ind = T, grepl("_t(-[0-9]*)*$", dbn$arcs[, 2]))]
+
+  for(i in seq(length(from))) {
+    f = from[i]
+    t = to[i]
+    f_name = get_variable_name(f)
+    f_index = get_variable_time_index(f) + 1
+    t_name = get_variable_name(t)
+    adjs[f_name, t_name, f_index] = 1
+  }
+  adjs
+}
+
+#' Get the adj matrix from a network 
+#'
+#' @description
+#' S3 generic returning a \code{data.frame} with the adjecency matrix of the model,
+#' For a \code{dbn} object it returns a data.frame with 0/1 identifing the edge, 
+#' whereas for a \code{dbn.fit} object it returns 
+#' 
+#' @rdname adj.matrix
+#' @return for \code{dbn} / \code{dbn.fit} a data.frame 
+#' @method adj.matrix dbn.fit
+#' 
+#' @export 
+#' @examples 
+#' \dontrun{
+#' fit <- fit_random_dbn(random.structure.dbn(c("A","B","C"), .5, .5, 1), "continuous")
+#' adj.matrix(fit)
+#' }
+adj.matrix.dbn.fit = function(dbn, ...) {
+  markov_order = markov_order(dbn)
+  nodes_t = names(dbn)[which(arr.ind = T, grepl("_t$", names(dbn)))]
+  n_names = unname(sapply(nodes_t, get_variable_name))
+  
+  num_nodes = length(nodes_t)
+
+  adjs = array(0, dim = c(num_nodes, num_nodes, (markov_order + 1)),
+                dimnames = list(from = n_names, to = n_names, 
+                                lag = 0:(markov_order)))
+
+  for(i in seq(length(nodes_t))) {
+    node = nodes_t[i]
+    node_name = n_names[i]
+    parents = dbn[[node]]$parents
+    for(parent in parents) {
+      p_name = get_variable_name(parent)
+      lag = get_variable_time_index(parent) + 1
+      adjs[p_name, node_name, lag] = 1
+    }
+  }
+  adjs
+}
+
