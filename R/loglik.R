@@ -164,7 +164,7 @@ logLik.dbn.fit <- function(object, data, nodes,
     t_names  <- intersect(t_names,  resolved)
   }
 
-  mo <- max(1L, get_max_mo_dbn_fit(object))   # >= 1 so build_shifted_df never gets 0
+  mo <- max(1L, markov_order(object))   # >= 1 so build_shifted_df never gets 0
   need_initial <- component %in% c("both", "initial")
   need_trans   <- component %in% c("both", "transition")
 

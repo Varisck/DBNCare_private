@@ -379,9 +379,9 @@ reverse.arc.dbn <- function(DBN, from, to, cycle_OK = TRUE) {
     stop("ERROR: Temporal arcs are irreversible in DBNs!!!")
   }
   DBN <-
-    DynamicBayesianNetwork::delete.arc.dbn(DBN = DBN, from = from, to = to)
+    DBNCare::delete.arc.dbn(DBN = DBN, from = from, to = to)
   DBN <-
-    DynamicBayesianNetwork::add.arc.dbn(
+    DBNCare::add.arc.dbn(
       DBN = DBN,
       from = to,
       to = from,

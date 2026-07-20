@@ -1,252 +1,148 @@
-#' Removes the suffix _t-1 from the node's name
-#'
-#' @param node_name a string representing the name of the node
-#'
-#' @return the modified string
-#' @export
-#'
-#' @examples remove_suffix_t_minus_1("A_t-1")
-remove_suffix_t_minus_1 <- function(node_name) {
-  if(is.character(node_name)==FALSE){
-    stop("node_name must be a character")
-  }
-  gsub("-[0-9]+$", "", node_name)
-}
+# Visualisation of Dynamic Bayesian Networks.
+#
+# `plot()` methods for `dbn` and `dbn.fit` objects. Nodes are laid out on a grid
+# of time slices: the current slice (`X_t` / `X_0`) forms the bottom row and each
+# lag (`X_t-1`, `X_t-2`, ... or `X_1`, `X_2`, ...) is stacked above it, up to the
+# Markov order of the network. Within a row the nodes are spread evenly across a
+# fixed width, so every row spans the same horizontal extent regardless of how
+# many nodes it holds.
 
-#' Removes the suffix _t from the node's name
-#'
-#' @param node_name a string representing the name of the node
-#'
-#' @return the modified string
-#' @export
-#'
-#' @examples remove_suffix_t("A_t")
-remove_suffix_t <- function(node_name) {
-  if(is.character(node_name)==FALSE){
-    stop("node_name must be a character")
-  }
-  modified_node_name <- sub("_t$", "", node_name)
-  return(modified_node_name)
-}
 
-#' Defines a level for every node in the network at time t
-#'
-#' @description
-#' Calculates the levels in which the nodes will be distributed when plotting
-#' the structure. This level is defined by their parent nodes: a node with no
-#' parents will always be in the level 0. Subsequently, the level of a node
-#' will be one more of the maximum level of its parents.
-#' @param net an object of class DBN representing a dynamic bayesian network
-#' @param order a topological order of the nodes at t, with the orphan nodes
-#' in the first place. See \code{\link{node.ordering}}
-#' @param lvl current level being processed
-#' @param acc accumulator of the nodes already processed
-#' @return a matrix with the names of the nodes in the first row and their
-#' levels in the second
-#' @export
-node_levels <- function(net, order, lvl = 1, acc = NULL){
-  if(!is.dbn(net)){
-    stop("net must be of class DBN")
+# Nodes and arcs of the network to be plotted. Returns a list with `node_ids`
+# (character vector) and `edges` (a two-column from/to character matrix).
+.dbn_plot_elements <- function(x, network) {
+  # Build from -> to pairs from each node's stored parents.
+  parent_edges <- function(net, ids) {
+    e <- do.call(rbind, lapply(ids, function(n) {
+      ps <- net[[n]]$parents
+      if (length(ps)) cbind(ps, n) else NULL
+    }))
+    if (is.null(e)) matrix(character(0), ncol = 2) else unname(e)
   }
-  ret <- acc
-  if(length(order) > 0){
-    clean_order <- remove_suffix_t(order[1])
-  
-    parent_n_order <-  net[['nodes']][[clean_order]][['t']][['parents']]
-    parent_n_order <- select_nodes_names_with_t(parent_n_order)
-    
-    pa <- which(acc[1,] %in% parent_n_order)
-  
-    if(length(pa) > 0 && max(as.numeric(cbind(c("_","0"),acc[,pa])[2,])) == lvl)
-      lvl <- lvl + 1
-    ret <- node_levels(net, order[-1], lvl, cbind(acc, c(order[1], lvl)))
-  }
-  return(ret)
-}
 
-#' Defines a level for every node in the network g_0
-#'
-#' @description
-#' Calculates the levels in which the nodes will be distributed when plotting
-#' the structure. This level is defined by their parent nodes: a node with no
-#' parents will always be in the level 0. Subsequently, the level of a node
-#' will be one more of the maximum level of his parents.
-#' @param net the object of class bn G_0 
-#' @param order a topological order of the nodes, with the orphan nodes
-#' in the first place. See \code{\link{node.ordering}}
-#' @param lvl current level being processed
-#' @param acc accumulator of the nodes already processed
-#' @return a matrix with the names of the nodes in the first row and their
-#' level in the second
-#' @export
-node_levels_g_0 <- function(net, order, lvl = 1, acc = NULL){
-  if(!is.bn(net)){
-    stop("net must be of class bn")
+  if (is.dbn(x)) {
+    g <- if (network == "g_t") get.transition.net(x) else get.g0.net(x)
+    node_ids <- names(g$nodes)
+    edges <- if (nrow(g$arcs)) unname(g$arcs) else matrix(character(0), ncol = 2)
+  } else if (is.dbn.fit(x)) {
+    if (network == "g_t") {
+      # A fitted DBN stores only the X_t nodes; the lagged parents X_t-k live as
+      # parent references, so add them back as nodes.
+      t_ids <- grep("_t$", names(x), value = TRUE)
+      edges <- parent_edges(x, t_ids)
+      node_ids <- unique(c(t_ids, edges[, 1]))
+    } else {
+      # Prior-network nodes are the initial slices X_0, X_1, ... (var_<digits>).
+      node_ids <- grep("_[0-9]+$", names(x), value = TRUE)
+      edges <- parent_edges(x, node_ids)
+    }
+  } else {
+    stop("plot: x must be an object of class 'dbn' or 'dbn.fit'")
   }
-  ret <- acc
-  if(length(order) > 0){
-    pa <- which(acc[1,] %in% bnlearn::parents(net, order[1]))
-    
-    if(length(pa) > 0 && max(as.numeric(cbind(c("_","0"),acc[,pa])[2,])) == lvl)
-      lvl <- lvl + 1
-    ret <- node_levels_g_0(net, order[-1], lvl, cbind(acc, c(order[1], lvl)))
-  }
-  return(ret)
+
+  list(node_ids = node_ids, edges = edges)
 }
 
 
-#' Plots the network G_0
-#'
-#' @param dbn a list representing a dbn
-#'
-#' @export
-#'
-plot_g0 <- function(dbn){
-  if(!is.dbn(dbn)){
-    stop("dbn must be of class DBN")
+# Render the time-slice grid layout with visNetwork.
+.dbn_visnetwork <- function(node_ids, edges, size) {
+  variables <- vapply(node_ids, get_variable_name, character(1))
+  lags      <- vapply(node_ids, get_variable_time_index, numeric(1))
+  max_lag   <- max(lags)
+
+  # x: within each lag row the nodes are spread evenly across [0, size], ordered
+  # by variable name so the same variable lines up in a column across rows.
+  x <- numeric(length(node_ids))
+  for (l in unique(lags)) {
+    idx <- which(lags == l)
+    idx <- idx[order(variables[idx])]
+    n   <- length(idx)
+    x[idx] <- if (n == 1) size / 2 else seq(0, size, length.out = n)
   }
-  g_0 <- from_DBN_to_G_0(dbn)
-  nodes_uniq <- bnlearn::node.ordering(g_0)
-  nodes <- data.frame(id = nodes_uniq,
-                      label = nodes_uniq,
-                      #font.size = 24,
-                      level = node_levels_g_0(g_0, nodes_uniq)[2,],
-                      shadow = FALSE,
-                      physics = FALSE)
-  
-  edges <- data.frame(from = bnlearn::arcs(g_0)[,1], #refactor using $arcs
-                      to = bnlearn::arcs(g_0)[,2], #refactor using $arcs
-                      arrows = "to",
-                      #smooth = TRUE, # visNetwork's bug
-                      shadow = FALSE
+
+  # y: lag 0 (X_t / X_0) forms the bottom row. visNetwork's y axis points down,
+  # so the bottom row takes the largest y. Rows are spaced like the horizontal
+  # node gap to keep the grid visually even.
+  per_row <- max(table(lags))
+  v_gap   <- if (per_row > 1) size / (per_row - 1) else size
+  y <- (max_lag - lags) * v_gap
+
+  nodes_df <- data.frame(
+    id = node_ids, label = node_ids, x = x, y = y,
+    physics = FALSE, stringsAsFactors = FALSE
   )
-  
-  ret <- visNetwork::visNetwork(nodes, edges) %>%
-    visNetwork::visHierarchicalLayout(levelSeparation = 100) %>%
-    visNetwork::visOptions(nodesIdSelection = T)
-  eval(ret)
+  edges_df <- data.frame(
+    from = edges[, 1], to = edges[, 2],
+    stringsAsFactors = FALSE
+  )
+
+  visNetwork::visNetwork(nodes_df, edges_df) %>%
+    visNetwork::visNodes(shape = "ellipse", font = list(size = size / 45)) %>%
+    visNetwork::visEdges(arrows = "to") %>%
+    visNetwork::visInteraction(dragNodes = TRUE, dragView = TRUE, zoomView = TRUE)
 }
 
 
-#' Returns a vector with the number of consecutive nodes in each level
+#' Plot a Dynamic Bayesian Network
 #'
 #' @description
-#' This method processes the vector of node levels to get the position of
-#' each node inside the level. E.g. c(1,1,1,2,2,3,4,4,5,5) turns into 
-#' c(1,2,3,1,2,1,1,2,1,2)
-#' @param nodes a vector with the level of each node
-#' @param res the accumulative results of the sub successions
-#' @param prev the level of the previous node processed
-#' @param acc the accumulator of the index in the current sub successions
-#' @return the vector of sub successions in each level
+#' Draws a DBN (`dbn`) or a fitted DBN (`dbn.fit`) as a time-slice grid using
+#' \pkg{visNetwork}. The current slice sits on the bottom row and each lag is
+#' stacked above it, up to the Markov order of the network:
+#' \itemize{
+#'   \item transition network (`g_t`): row 0 holds the `X_t` nodes, row 1 the
+#'     `X_t-1` nodes, ..., up to `X_t-markov_order`;
+#'   \item prior network (`g_0`): row 0 holds the `X_0` nodes, row 1 the `X_1`
+#'     nodes, ..., up to `X_(markov_order - 1)` when the DBN was built with
+#'     `extend_g0 = TRUE`.
+#' }
+#' Within every row the nodes are spread evenly across the same horizontal width
+#' (`size`), so a row of 5 nodes and a row of 10 nodes both span the full width;
+#' shrink or grow `size` to make the graph more compact or more spread out.
+#'
+#' Because `plot.dbn` / `plot.dbn.fit` are S3 methods for the base
+#' \code{\link[graphics]{plot}} generic, `plot(dbn)` works out of the box.
+#'
+#' @param x an object of class `dbn` or `dbn.fit`.
+#' @param network which network to draw: `"g_t"` (transition network, the
+#'   default) or `"g_0"` (prior network).
+#' @param size horizontal width each row is spread across. Defaults to
+#'   `num_nodes * 1000`, where `num_nodes` is the number of variables in the
+#'   network.
+#' @param ... further arguments (currently unused).
+#'
+#' @return a \pkg{visNetwork} \code{htmlwidget}, drawn when printed.
+#' @name plot.dbn
+#'
+#' @examples
+#' \dontrun{
+#' dbn <- random.structure.dbn(c("A", "B", "C"), .5, .5, markov_order = 2)
+#' plot(dbn)                       # transition network
+#' plot(dbn, network = "g_0")      # prior network
+#' plot(dbn, size = 3000)          # more compact
+#' }
+NULL
+
+#' @rdname plot.dbn
+#' @method plot dbn
 #' @export
-#' @keywords internal
-acc_successions <- function(nodes, res = NULL, prev = 0, acc = 0){
-  if(length(nodes) == 0)
-    return(res)
-  else if(prev == nodes[1])
-    return(acc_successions(nodes[-1], c(res, acc+1), prev, acc+1))
-  else
-    return(acc_successions(nodes[-1], c(res, 1), nodes[1], 1))
+plot.dbn <- function(x, network = c("g_t", "g_0"), size = NULL, ...) {
+  if (!is.dbn(x)) stop("plot.dbn: x must be an object of class 'dbn'")
+  network <- match.arg(network)
+  el <- .dbn_plot_elements(x, network)
+  if (is.null(size))
+    size <- length(unique(vapply(el$node_ids, get_variable_name, character(1)))) * 1000
+  .dbn_visnetwork(el$node_ids, el$edges, size)
 }
 
-
-#' Filters out all the nodes names that do not end up with t
-#'
-#' @param nodes_list a list containing nodes names
-#'
-#' @return a filtered list with nodes names that end up with t
+#' @rdname plot.dbn
+#' @method plot dbn.fit
 #' @export
-#'
-select_nodes_names_with_t <- function(nodes_list) {
-  if(is.character(nodes_list)==FALSE){
-    stop("nodes_list must be a character!")
-  }
-  filtered <- nodes_list[grep("_t$", nodes_list)]
-  return(filtered)
-}
-
-#' Filters out all the nodes names that do not end up with t-n
-#'
-#' @param nodes_list a list containing nodes names
-#' @param n time point
-#'
-#' @export
-#'
-select_nodes_names_with_t_minus_n <- function(nodes_list, n) {
-  if(is.character(nodes_list)==FALSE){
-    stop("nodes_list must be a character!")
-  }
-  if(is.numeric(n)==FALSE){
-    stop("n must be numeric!")
-  }
-  # Regular expression pattern to match strings ending with t-n 
-  pattern <- paste0("\\w+_t-", n, "$")  
-  filtered_strings <- grep(pattern, nodes_list, value = TRUE)
-  return(filtered_strings)
-}
-
-#' Gets the topological ordered nodes list
-#'
-#' @description 
-#' This method gets the structure of a DBN, isolates the nodes of the 
-#' time slice t and then gives a topological ordering of them.
-#' @param structure the structure of the network.
-#' @return the ordered nodes at time t
-#' 
-#' @export
-dynamic_ordering <- function(dbn){
-  if(!is.dbn(dbn)){
-    stop("dbn must be of class DBN")
-  }
-  g_transition <- from_DBN_to_G_transition(dbn)
-  nodes_t <- bnlearn::node.ordering(g_transition)
-  nodes_t <- select_nodes_names_with_t(nodes_t)
-  return(nodes_t)
-}
-
-#' Plots the network G_transition
-#'
-#' @param dbn a list representing a dbn 
-#'
-#' @export
-#'
-plot_g_transition <- function(dbn){
-  if(!is.dbn(dbn)){
-    stop("dbn must be of class DBN")
-  }
-  g_transition <- from_DBN_to_G_transition(dbn)
-  ordered_node_at_t <- dynamic_ordering(dbn)
-  nodes_at_t_levels <- node_levels(dbn,ordered_node_at_t)
-  x_axis_positions <- acc_successions(as.numeric(nodes_at_t_levels[2,]))*100
-  nodes_list <-  bnlearn::node.ordering(g_transition)
-  nodes_list <- select_nodes_names_with_t(nodes_list)
-  edges <- data.frame(g_transition$arcs)
-  y_axis_positions <-  as.integer(nodes_at_t_levels[2,])*100
-  nodes_df <- list()
-  for(i in 1:length(nodes_list)){
-    nodes_df[['id']] <- c(nodes_df[['id']],nodes_list[i])
-    nodes_df[['label']] <- c(nodes_df[['label']],nodes_list[i])
-    nodes_df[['x']] <- c(nodes_df[['x']],x_axis_positions[i])
-    nodes_df[['y']] <-c(nodes_df[['y']],y_axis_positions[i])
-  }
-  nodes_t_minus_n <- bnlearn::node.ordering(g_transition)
-  nodes_t_minus_n <- select_nodes_names_with_t_minus_n(nodes_t_minus_n, 1)
-  nodes_df_tmp <- data.frame(nodes_df)
-  for(i in 1:length(nodes_t_minus_n)){
-    string_with_no_time <- remove_suffix_t_minus_1(nodes_t_minus_n[i])
-    row_index <- nodes_df_tmp[, "label"] == string_with_no_time
-    value_of_x <- nodes_df_tmp[row_index, "x"]-450 #set default offset taking into account  the max number of node for the same level
-    value_of_y <- nodes_df_tmp[row_index, "y"]
-    nodes_df[['id']] <- c(nodes_df[['id']],nodes_t_minus_n[i])
-    nodes_df[['label']] <- c(nodes_df[['label']],nodes_t_minus_n[i])
-    nodes_df[['x']] <- c(nodes_df[['x']], value_of_x)
-    nodes_df[['y']] <- c(nodes_df[['y']], value_of_y)
-  }
-  nodes_df <- data.frame(nodes_df)
-  nodes_df$physics <- FALSE
-  
-  visNetwork::visNetwork(nodes_df, edges, width = "100%", height = 1000) %>% 
-    visNetwork::visEdges(arrows = "to")
-  
+plot.dbn.fit <- function(x, network = c("g_t", "g_0"), size = NULL, ...) {
+  if (!is.dbn.fit(x)) stop("plot.dbn.fit: x must be an object of class 'dbn.fit'")
+  network <- match.arg(network)
+  el <- .dbn_plot_elements(x, network)
+  if (is.null(size))
+    size <- length(unique(vapply(el$node_ids, get_variable_name, character(1)))) * 1000
+  .dbn_visnetwork(el$node_ids, el$edges, size)
 }

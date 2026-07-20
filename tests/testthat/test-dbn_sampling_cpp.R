@@ -176,3 +176,83 @@ test_that("dbn.sampling validates its inputs like dbn.sampling", {
   expect_error(dbn.sampling(fit, 5, 0), "Time must be greater than 0!")
   expect_error(dbn.sampling(c("dbn"), 5, 4), "fitted_DBN must be a dbn.fit object")
 })
+
+# Extended G_0: when markov_order > 1 the prior network can span several initial
+# slices (var_0, var_1, ...) linked by prior arcs running ALONG the markov
+# dimension (e.g. A_0 -> A_1). dbn.sampling must sample each extended slice var_i
+# and place it at Time == i (driven by its own G_0 regressor), only then handing
+# over to the transition network. dbn.sampling.R cannot sample an extended G_0,
+# so these tests check dbn.sampling's output directly rather than comparing.
+
+test_that("dbn.sampling places extended-G_0 slices along the markov dimension", {
+  # markov order 3, single variable, a prior chain A_0 -> A_1 -> A_2 inside G_0
+  dbn <- empty.dbn(dynamic_nodes = c("A"), markov_order = 3)
+  dbn <- add.arc.dbn(dbn, from = c("A", "t_0"), to = c("A", "t_1"))
+  dbn <- add.arc.dbn(dbn, from = c("A", "t_1"), to = c("A", "t_2"))
+  dbn <- add.arc.dbn(dbn, from = c("A", "t-1"), to = c("A", "t"))
+
+  # clear G_0 regressors with (essentially) no residual noise, so the extended
+  # slices are deterministic functions of A_0: A_1 = 4*A_0, A_2 = 3*A_1
+  fit <- dbn.fit(DBN = dbn, distribution = list(
+    A_0 = cpd_for(dbn, "A_0", 0.0, c(),           1.0),
+    A_1 = cpd_for(dbn, "A_1", 0.0, c(A_0 = 4.0),  1e-6),
+    A_2 = cpd_for(dbn, "A_2", 0.0, c(A_1 = 3.0),  1e-6),
+    A_t = cpd_for(dbn, "A_t", 0.0, c(`A_t-1` = 0.6), 0.4)
+  ))
+  expect_equal(markov_order(fit), 3)
+
+  set.seed(101)
+  sampled <- dbn.sampling(fit, n_samples = 500, max_time = 5)
+
+  # the extended slices must map to the single base column A (no duplicate
+  # column) and the frame keeps the standard (max_time + 1) rows per sample
+  expect_setequal(names(sampled), c("Time", "Sample_id", "A"))
+  expect_equal(ncol(sampled), 3L)
+  expect_equal(nrow(sampled), 500L * (5L + 1L))
+
+  a0 <- sampled$A[sampled$Time == 0]
+  a1 <- sampled$A[sampled$Time == 1]
+  a2 <- sampled$A[sampled$Time == 2]
+  a3 <- sampled$A[sampled$Time == 3]
+
+  # G_0 regressors are honoured slice by slice, A_i placed at Time == i
+  expect_equal(a1, 4 * a0, tolerance = 1e-3)
+  expect_equal(a2, 3 * a1, tolerance = 1e-3)
+
+  # from Time == 3 the transition network takes over (A_t = 0.6 * A_t-1)
+  expect_equal(unname(coef(lm(a3 ~ a2))[2]), 0.6, tolerance = 0.1)
+})
+
+test_that("dbn.sampling handles cross-variable extended-G_0 arcs", {
+  # two variables, a within-variable (A_0 -> A_1) and a cross-variable
+  # (A_0 -> B_1) prior arc along the markov dimension
+  dbn <- empty.dbn(dynamic_nodes = c("A", "B"), markov_order = 2)
+  dbn <- add.arc.dbn(dbn, from = c("A", "t_0"), to = c("A", "t_1"))
+  dbn <- add.arc.dbn(dbn, from = c("A", "t_0"), to = c("B", "t_1"))
+  dbn <- add.arc.dbn(dbn, from = c("A", "t-1"), to = c("A", "t"))
+  dbn <- add.arc.dbn(dbn, from = c("B", "t-1"), to = c("B", "t"))
+
+  fit <- dbn.fit(DBN = dbn, distribution = list(
+    A_0 = cpd_for(dbn, "A_0", 0.0, c(),            1.0),
+    B_0 = cpd_for(dbn, "B_0", 0.0, c(),            1.0),
+    A_1 = cpd_for(dbn, "A_1", 0.0, c(A_0 =  2.0),  1e-6),
+    B_1 = cpd_for(dbn, "B_1", 1.0, c(A_0 = -3.0),  1e-6),
+    A_t = cpd_for(dbn, "A_t", 0.0, c(`A_t-1` = 0.5), 0.3),
+    B_t = cpd_for(dbn, "B_t", 0.0, c(`B_t-1` = 0.5), 0.3)
+  ))
+
+  set.seed(202)
+  sampled <- dbn.sampling(fit, n_samples = 400, max_time = 4)
+
+  expect_setequal(names(sampled), c("Time", "Sample_id", "A", "B"))
+  expect_equal(ncol(sampled), 4L)
+
+  a0 <- sampled$A[sampled$Time == 0]
+  a1 <- sampled$A[sampled$Time == 1]
+  b1 <- sampled$B[sampled$Time == 1]
+
+  # A_1 reads A at Time 0; B_1 reads A (not B) at Time 0 -> the cross-variable,
+  # cross-slice parent reference resolves to the right column and slice
+  expect_equal(a1, 2 * a0, tolerance = 1e-3)
+  expect_equal(b1, 1 - 3 * a0, tolerance = 1e-3)
+})

@@ -16,6 +16,6 @@ time index of a node n
 Get the time index of a node
 }
 \examples{
-time_lag <- get_index_regular_expression("A_t-1")
+time_lag <- get_variable_time_index("A_t-1")
 time_lag == 1
 }

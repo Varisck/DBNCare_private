@@ -2,14 +2,14 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 dbn_sample_gaussian_cpp <- function(n_samples, max_time, n_vars, plan_0, plan_t) {
-    .Call(`_DynamicBayesianNetwork_dbn_sample_gaussian_cpp`, n_samples, max_time, n_vars, plan_0, plan_t)
+    .Call(`_DBNCare_dbn_sample_gaussian_cpp`, n_samples, max_time, n_vars, plan_0, plan_t)
 }
 
 dbn_sample_discrete_cpp <- function(n_samples, max_time, n_vars, n_levels, plan_0, plan_t) {
-    .Call(`_DynamicBayesianNetwork_dbn_sample_discrete_cpp`, n_samples, max_time, n_vars, n_levels, plan_0, plan_t)
+    .Call(`_DBNCare_dbn_sample_discrete_cpp`, n_samples, max_time, n_vars, n_levels, plan_0, plan_t)
 }
 
 dbn_sample_mixed_cpp <- function(n_samples, max_time, n_vars, n_levels, plan_0, plan_t, node_ordering_0, node_ordering_t) {
-    .Call(`_DynamicBayesianNetwork_dbn_sample_mixed_cpp`, n_samples, max_time, n_vars, n_levels, plan_0, plan_t, node_ordering_0, node_ordering_t)
+    .Call(`_DBNCare_dbn_sample_mixed_cpp`, n_samples, max_time, n_vars, n_levels, plan_0, plan_t, node_ordering_0, node_ordering_t)
 }
 

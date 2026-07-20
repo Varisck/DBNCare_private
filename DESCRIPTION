@@ -1,8 +1,10 @@
-Package: DynamicBayesianNetwork
+Package: DBNCare
 Title: An R package for Dynamic Bayesian Networks (DBNs)
 Version: 0.0.0.9000
 Authors@R: 
     c(person("Federico", "Pirola", , "f.pirola17@campus.unimib.it", role = c("aut", "cre"),
+           comment = c(ORCID = "YOUR-ORCID-ID")),
+      person("Alberto", "Varisco", , "alberto.varisco1@gmail.com", role = c("aut"),
            comment = c(ORCID = "YOUR-ORCID-ID")),
       person("Francesco", "Canonaco", , "francesco.canonaco@minutia.ai", role = "aut",
            comment = c(ORCID = "YOUR-ORCID-ID"))

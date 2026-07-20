@@ -5,7 +5,7 @@ output:
     df_print: paged
 ---
 
-Here we present a case study on Type 1 Diabetes, known also as Diabetes Mellitus, to show all the main functions of our library DBNcare working with longitudinal data. The notebook shows how to initialize and modify a Dynamic Bayesian Network (DBN) and how to learn the structure and parameters of the model with different methods. It also explores how to generate a dataset given the structure and the parameters of the DBN and how to answer to different inference queries.
+Here we present a case study on Type 1 Diabetes, known also as Diabetes Mellitus, to show all the main functions of our library DBNCare working with longitudinal data. The notebook shows how to initialize and modify a Dynamic Bayesian Network (DBN) and how to learn the structure and parameters of the model with different methods. It also explores how to generate a dataset given the structure and the parameters of the DBN and how to answer to different inference queries.
 
 # Dynamic Bayesian Network from a simulated study on Type 1 Diabetes
 
@@ -51,7 +51,7 @@ Hereinafter, the set of edges describing the relationship at time 0 and over tim
 library(zeallot)
 library(bnlearn)
 library(gRain)
-library(DynamicBayesianNetwork)
+library(DBNCare)
 
 #Edges list
 arcs_list <- c(
@@ -96,7 +96,7 @@ print(arcs_matrix)
 
 ```
 
-The DBN structure is initialized via `empty_DBN` function from DBNcare and the arcs are added sequentially from the matrix defined above via `add_arc_DBN` function from the same library. Indeed, function `summary_DBN` gives a brief summary of the DBN structure, such as the number of nodes, the number of edges in each network and the parent set of each node included in the DBN.
+The DBN structure is initialized via `empty_DBN` function from DBNCare and the arcs are added sequentially from the matrix defined above via `add_arc_DBN` function from the same library. Indeed, function `summary_DBN` gives a brief summary of the DBN structure, such as the number of nodes, the number of edges in each network and the parent set of each node included in the DBN.
 
 ```{R}
 # Empty DBN initialization
@@ -135,24 +135,24 @@ for (i in 1:nrow(arcs_matrix)) {
 summary_DBN(diabetes_management_dbn)
 ```
 
-The Network at time 0 is visualized via `plot_g0` function from DBNcare:
+The Network at time 0 is visualized via the `plot` method from DBNCare with `network = "g_0"`:
 
 ```{r}
 # Network at time 0
-plot_g0(diabetes_management_dbn)
+plot(diabetes_management_dbn, network = "g_0")
 ```
 
-The same goes for the transition network through function `plot_g_transition`:
+The same goes for the transition network, the default of `plot`:
 
 ```{r}
 # Transition Network
-plot_g_transition(diabetes_management_dbn)
+plot(diabetes_management_dbn)
 ```
 
 
 # Variables' levels and DBN' conditional probability tables (CPTs) definition
 
-DBNcare supports Multinomial DBNs, thus we defined every variables included in the model as categorical. Some of the variables are binary and others present three levels, depending on the information obtained from the reference paper and other state-of-the-art works on Type 1 Diabetes. 
+DBNCare supports Multinomial DBNs, thus we defined every variables included in the model as categorical. Some of the variables are binary and others present three levels, depending on the information obtained from the reference paper and other state-of-the-art works on Type 1 Diabetes. 
 Hereinafter the dynamic variables are listed along with their respective levels:
 
 - **HDL**:
@@ -556,17 +556,17 @@ CPT_list <- list(
 )
 ```
 
-Given an object of class `dbn` describing the structure of the DBN and a coherent list of CPTs for both variables at time 0 and at time t, `DBN_parameters` function from DBNcare generates an object of class `dbn.fit`. For each node in the network the parent set, the children set and the set of CPTs are saved in a named list.
+Given an object of class `dbn` describing the structure of the DBN and a coherent list of CPTs for both variables at time 0 and at time t, `DBN_parameters` function from DBNCare generates an object of class `dbn.fit`. For each node in the network the parent set, the children set and the set of CPTs are saved in a named list.
 
 ```{R}
 # Generation of an object of class dbn.fit obtained by encoding the information from the EI-DBN
-fitted_diabetes_management_dbn <- DynamicBayesianNetwork::DBN_parameters(diabetes_management_dbn, CPT_list)
+fitted_diabetes_management_dbn <- DBNCare::DBN_parameters(diabetes_management_dbn, CPT_list)
 fitted_diabetes_management_dbn
 ```
 
 # Sampling data given the structure and the parameters of a DBN
 
-A dataset comprised of 10k time series of 5 samples each (+ data at time 0) is generated via `dbn_sampling` function from `DBNcare`. Data are generated sequentially following the partially node ordering implied by the network and the temporal order, from data at time 0 to the fifth time slice. For each sample, the value for each node at time t is obtained by randomly generate a value from the multinulli distribution with probabilities depending on the previously generated parents' values.
+A dataset comprised of 10k time series of 5 samples each (+ data at time 0) is generated via `dbn_sampling` function from `DBNCare`. Data are generated sequentially following the partially node ordering implied by the network and the temporal order, from data at time 0 to the fifth time slice. For each sample, the value for each node at time t is obtained by randomly generate a value from the multinulli distribution with probabilities depending on the previously generated parents' values.
 
 ```{r}
 # A set of 10k time series of 5(+1) samples each are generated from the CPTs of the encoded EI-DBN
@@ -575,7 +575,7 @@ sample_data_diabetes <- dbn_sampling(fitted_diabetes_management_dbn, 10000, 5)
 
 # Learning a DBN from Data: Structure Learning and Parameter Learning implementation
 
-Firstly the parameters of the DBN are learned given the structure from the reference paper (EI-DBN). The parameteres are learned via Maximum Likelihood Estimation via `DBN_parameters` function of `DBNcare`.
+Firstly the parameters of the DBN are learned given the structure from the reference paper (EI-DBN). The parameteres are learned via Maximum Likelihood Estimation via `DBN_parameters` function of `DBNCare`.
 
 ```{r}
 # Here the parameters are learned on the sample set given the structure encoded in the EI-DBN
@@ -588,7 +588,7 @@ Once learned the structure, the parameters are obtained via Maximum Likelihood e
 ```{r}
 # Here, instead, both the structure and the parameters of the network are learned from the sample set
 # The structure is learned via Hill Climbing method, using Bayesian Information Criterion as local score 
-learned_diabetes_management_dbn <- DynamicBayesianNetwork::StructureLearning.Network(data = sample_data_diabetes, algorithm = 'hc', score='bic')
+learned_diabetes_management_dbn <- DBNCare::StructureLearning.Network(data = sample_data_diabetes, algorithm = 'hc', score='bic')
 summary_DBN(learned_diabetes_management_dbn)
 # The parameters are learned instead with a standard frequentist estimation, namely the Maximum Likelihood estimation
 learned_diabetes_management_cpts <- DBN_parameters(DBN = learned_diabetes_management_dbn, data = sample_data_diabetes)
@@ -596,21 +596,21 @@ learned_diabetes_management_cpts <- DBN_parameters(DBN = learned_diabetes_manage
 
 ```{r}
 # Visualization of the initial network for the learned DBN (via Hill Climbing method)
-plot_g0(learned_diabetes_management_dbn)
+plot(learned_diabetes_management_dbn, network = "g_0")
 ```
 
 ```{r}
 # Visualization of the transition network for the learned DBN (via Hill Climbing method)
-plot_g_transition(learned_diabetes_management_dbn)
+plot(learned_diabetes_management_dbn)
 ```
 
 # Inference for DBNs: Filtering, Smoothing, Prediction and Forecasting
 
 Temporal inference could be of different types based on the time of the event of interest and the evidence available. Specifically, we talk about prediction when we want to predict the risk of future events, smoothing when we want to infer the probability of an event in the past and filtering when we are interested in inferring the present state. Forecasting is instead the task of predicting multiple future states given the current state of the patients, thus we need to know the entire set of features defined in the network to answer to forecasting queries. 
 
-All these kinds of inference are implemented in `DBNcare` and could be applied by transforming the DBN in the unrolled form via `get_unrolled_dbn` function. 
+All these kinds of inference are implemented in `DBNCare` and could be applied by transforming the DBN in the unrolled form via `get_unrolled_dbn` function. 
 
-Filtering, Smoothing and Prediction via approximated methods could be put in place via `cpquery` function from `bnlearn` library. Exact inference could be instead implemented directly using `gRain` library. Finally, forecasting function (`dbn_forecasting`) is natively from `DBNcare`. 
+Filtering, Smoothing and Prediction via approximated methods could be put in place via `cpquery` function from `bnlearn` library. Exact inference could be instead implemented directly using `gRain` library. Finally, forecasting function (`dbn_forecasting`) is natively from `DBNCare`. 
 
 Hereinafter, we show the results obtained by executing 4 different queries about Type 1 Diabetes patients' risk of cardiovascular diseases and nephropathy. 
 
@@ -681,7 +681,7 @@ dbn_forecasting(fitted_diabetes_management_dbn, current_state, 4)
 
 ```{r}
 # Here, the structure is learned via PC stable method, using Mutual Information as conditional independence test 
-diabetes_management_dbn_PC <- DynamicBayesianNetwork::StructureLearning.Network(data = sample_data_diabetes, algorithm = 'pc.stable', test='mi')
+diabetes_management_dbn_PC <- DBNCare::StructureLearning.Network(data = sample_data_diabetes, algorithm = 'pc.stable', test='mi')
 summary_DBN(diabetes_management_dbn_PC)
 # The parameters are always learned via Maximum Likelihood estimation
 diabetes_management_cpts_PC_ML <- DBN_parameters(DBN = diabetes_management_dbn_PC, data = sample_data_diabetes)
@@ -689,7 +689,7 @@ diabetes_management_cpts_PC_ML <- DBN_parameters(DBN = diabetes_management_dbn_P
 
 ```{r}
 # Here, the structure is learned via Restricted Maximization method, using log-likelihood as a score for Tabu Search score-based method and Mutual Information as a conditional independence test for PC-stable method
-diabetes_management_dbn_MMHC <- DynamicBayesianNetwork::StructureLearning.Network(data = sample_data_diabetes, algorithm = 'rsmax2', algorithm.res = "pc.stable", algorithm.max = "tabu", score='loglik',test='mi')
+diabetes_management_dbn_MMHC <- DBNCare::StructureLearning.Network(data = sample_data_diabetes, algorithm = 'rsmax2', algorithm.res = "pc.stable", algorithm.max = "tabu", score='loglik',test='mi')
 summary_DBN(diabetes_management_dbn_MMHC)
 # The parameters are always learned via Maximum Likelihood estimation
 diabetes_management_cpts_MMHC_ML <- DBN_parameters(DBN = diabetes_management_dbn_MMHC, data = sample_data_diabetes)
@@ -710,7 +710,7 @@ wl_to <- c('CVD_0','CVD_0','CVD_t','CVD_t')
 whitelist_set <- matrix(c(wl_from,wl_to), ncol = 2, byrow = FALSE)
 colnames(whitelist_set) <- c('from','to')
 
-diabetes_management_dbn_HC_prior <- DynamicBayesianNetwork::StructureLearning.Network(data = sample_data_diabetes, algorithm = 'hc', score='bic',blacklist=blacklist_set,whitelist=whitelist_set)
+diabetes_management_dbn_HC_prior <- DBNCare::StructureLearning.Network(data = sample_data_diabetes, algorithm = 'hc', score='bic',blacklist=blacklist_set,whitelist=whitelist_set)
 summary_DBN(diabetes_management_dbn_HC_prior)
 # The parameters are always learned via Maximum Likelihood estimation
 diabetes_management_cpts_HC_ML_prior <- DBN_parameters(DBN = diabetes_management_dbn_HC_prior, data = sample_data_diabetes)

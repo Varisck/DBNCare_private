@@ -41,17 +41,15 @@ concat_name_post = function(name, postfix,
 #' @export
 #' 
 #' @examples
-#' time_lag <- get_index_regular_expression("A_t-1")
+#' time_lag <- get_variable_time_index("A_t-1")
 #' time_lag == 1
 get_variable_time_index = function(variable) {
   var_split = strsplit(variable, "_")[[1]]
-  if(var_split[length(var_split)] == '0' ||
-     var_split[length(var_split)] == 't')
-    return(as.numeric(0))
-  if(!grepl("^t-\\d+$", var_split[length(var_split)]))
-    stop("Error get_variable_time_index: invalid time format")
-  time = strsplit(var_split[length(var_split)], "t-")[[1]]
-  as.numeric(time[length(time)])
+  tok = var_split[length(var_split)]
+  if(tok == 't') return(as.numeric(0))                          # current slice X_t
+  if(grepl("^[0-9]+$", tok)) return(as.numeric(tok))            # initial slices X_0, X_1, ...
+  if(grepl("^t-[0-9]+$", tok)) return(as.numeric(sub("^t-", "", tok)))  # lagged parents X_t-k
+  stop("Error get_variable_time_index: invalid time format")
 }
 
 

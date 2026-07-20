@@ -82,7 +82,7 @@ test_that("CPTs are generated correctly", {
   )
   
   fitted_DBN <-
-    DynamicBayesianNetwork::dbn.fit(DBN = dbn, distribution = CPTs_toy)
+    DBNCare::dbn.fit(DBN = dbn, distribution = CPTs_toy)
   expect_equal(class(fitted_DBN), 'dbn.fit')
   expect_equal(fitted_DBN$A_0$node, 'A_0')
   expect_equal(fitted_DBN$B_0$node, 'B_0')
@@ -171,9 +171,9 @@ test_that("Learned G_0 has been generated correctly", {
   )
   
   fitted_DBN <-
-    DynamicBayesianNetwork::dbn.fit(DBN = dbn, distribution = CPTs_toy)
+    DBNCare::dbn.fit(DBN = dbn, distribution = CPTs_toy)
   fitted_G_0 <-
-    DynamicBayesianNetwork::get.g0.net(fitted_DBN)
+    DBNCare::get.g0.net(fitted_DBN)
   expect_true(inherits(fitted_G_0, 'bn.fit'))
   expect_equal(names(fitted_G_0), c('A_0', 'B_0'))
 })
@@ -181,27 +181,27 @@ test_that("Learned G_0 has been generated correctly", {
 test_that("Learned Transition Network has been generated correctly", {
   d_nodes <- c("A", "B")
   dbn <-
-    DynamicBayesianNetwork::empty.dbn(dynamic_nodes = d_nodes, markov_order = 1)
+    DBNCare::empty.dbn(dynamic_nodes = d_nodes, markov_order = 1)
   dbn <-
-    DynamicBayesianNetwork::add.arc.dbn(DBN = dbn,
+    DBNCare::add.arc.dbn(DBN = dbn,
                                         from = c('B', 't'),
                                         to = c('A', 't'))
   dbn <-
-    DynamicBayesianNetwork::add.arc.dbn(DBN = dbn,
+    DBNCare::add.arc.dbn(DBN = dbn,
                                         from = c('A', 't_0'),
                                         to = c('B', 't_0'))
   dbn <-
-    DynamicBayesianNetwork::add.arc.dbn(DBN = dbn,
+    DBNCare::add.arc.dbn(DBN = dbn,
                                         from = c('A', 't-1'),
                                         to = c('A', 't'))
   dbn <-
-    DynamicBayesianNetwork::reverse.arc.dbn(DBN = dbn,
+    DBNCare::reverse.arc.dbn(DBN = dbn,
                                             from = c('B', 't'),
                                             to = c('A', 't'))
-  G_0 <- DynamicBayesianNetwork::get.g0.net(dbn)
+  G_0 <- DBNCare::get.g0.net(dbn)
   
   G_transition <-
-    DynamicBayesianNetwork::get.transition.net(dbn)
+    DBNCare::get.transition.net(dbn)
   
   A_lv = c('yes', 'no')
   B_lv = c('high', 'low')
@@ -232,9 +232,9 @@ test_that("Learned Transition Network has been generated correctly", {
   )
   
   fitted_DBN <-
-    DynamicBayesianNetwork::dbn.fit(DBN = dbn, distribution = CPTs_toy)
+    DBNCare::dbn.fit(DBN = dbn, distribution = CPTs_toy)
   fitted_G_transition <-
-    DynamicBayesianNetwork::get.transition.net(fitted_DBN)
+    DBNCare::get.transition.net(fitted_DBN)
   expect_true(inherits(fitted_G_transition, 'bn.fit'))
   expect_equal(names(fitted_G_transition), c('A_t', 'B_t'))
 })
@@ -243,23 +243,23 @@ test_that("CPTs learned from randomly generate data are almost equal to original
           {
             d_nodes <- c("A", "B")
             dbn <-
-              DynamicBayesianNetwork::empty.dbn(dynamic_nodes = d_nodes, markov_order = 1)
+              DBNCare::empty.dbn(dynamic_nodes = d_nodes, markov_order = 1)
             dbn <-
-              DynamicBayesianNetwork::add.arc.dbn(DBN = dbn,
+              DBNCare::add.arc.dbn(DBN = dbn,
                                                   from = c('A', 't'),
                                                   to = c('B', 't'))
             dbn <-
-              DynamicBayesianNetwork::add.arc.dbn(DBN = dbn,
+              DBNCare::add.arc.dbn(DBN = dbn,
                                                   from = c('A', 't_0'),
                                                   to = c('B', 't_0'))
             dbn <-
-              DynamicBayesianNetwork::add.arc.dbn(DBN = dbn,
+              DBNCare::add.arc.dbn(DBN = dbn,
                                                   from = c('A', 't-1'),
                                                   to = c('A', 't'))
-            G_0 <- DynamicBayesianNetwork::get.g0.net(dbn)
+            G_0 <- DBNCare::get.g0.net(dbn)
             
             G_transition <-
-              DynamicBayesianNetwork::get.transition.net(dbn)
+              DBNCare::get.transition.net(dbn)
             
             #B_lv = c('yes','no')
             A_lv = c('yes', 'no')
@@ -291,13 +291,13 @@ test_that("CPTs learned from randomly generate data are almost equal to original
             )
             
             fitted_DBN <-
-              DynamicBayesianNetwork::dbn.fit(DBN = dbn, distribution = CPTs_toy)
+              DBNCare::dbn.fit(DBN = dbn, distribution = CPTs_toy)
             N_samples <- 5000
             Time <- 4
             sampling_set <-
-              DynamicBayesianNetwork::dbn.sampling(fitted_DBN, N_samples, Time)
+              DBNCare::dbn.sampling(fitted_DBN, N_samples, Time)
             learned_dbn <-
-              DynamicBayesianNetwork::dbn.fit(DBN = dbn, data = sampling_set)
+              DBNCare::dbn.fit(DBN = dbn, data = sampling_set)
             expect_equal(sum(learned_dbn$A_0$prob), 1)
             expect_equal(all(apply(
               learned_dbn$B_0$prob, setdiff(1:length(dimnames(CPTs_toy$B_0)), which(names(
@@ -328,39 +328,39 @@ test_that("CPTs learned from randomly generate data are almost equal to original
                          tolerance = 0.05)
             d_nodes_2 <- c('H_2_0', 'Infected', 'Tumor_size')
             dbn_2 <-
-              DynamicBayesianNetwork::empty.dbn(dynamic_nodes = d_nodes_2, markov_order = 1)
+              DBNCare::empty.dbn(dynamic_nodes = d_nodes_2, markov_order = 1)
             dbn_2 <-
-              DynamicBayesianNetwork::add.arc.dbn(
+              DBNCare::add.arc.dbn(
                 DBN = dbn_2,
                 from = c('H_2_0', 't'),
                 to = c('Infected', 't')
               )
             dbn_2 <-
-              DynamicBayesianNetwork::add.arc.dbn(
+              DBNCare::add.arc.dbn(
                 DBN = dbn_2,
                 from = c('Infected', 't-1'),
                 to = c('Infected', 't')
               )
             dbn_2 <-
-              DynamicBayesianNetwork::add.arc.dbn(
+              DBNCare::add.arc.dbn(
                 DBN = dbn_2,
                 from = c('Tumor_size', 't-1'),
                 to = c('Tumor_size', 't')
               )
             dbn_2 <-
-              DynamicBayesianNetwork::add.arc.dbn(
+              DBNCare::add.arc.dbn(
                 DBN = dbn_2,
                 from = c('Infected', 't-1'),
                 to = c('Tumor_size', 't')
               )
             dbn_2 <-
-              DynamicBayesianNetwork::add.arc.dbn(
+              DBNCare::add.arc.dbn(
                 DBN = dbn_2,
                 from = c('H_2_0', 't_0'),
                 to = c('Infected', 't_0')
               )
             dbn_2 <-
-              DynamicBayesianNetwork::add.arc.dbn(
+              DBNCare::add.arc.dbn(
                 DBN = dbn_2,
                 from = c('Infected', 't_0'),
                 to = c('Tumor_size', 't_0')
@@ -419,13 +419,13 @@ test_that("CPTs learned from randomly generate data are almost equal to original
               Tumor_size_t = Tumor_size_t.prob
             )
             dbn_from_cpts <-
-              DynamicBayesianNetwork::dbn.fit(DBN = dbn_2, distribution = cpts_2)
+              DBNCare::dbn.fit(DBN = dbn_2, distribution = cpts_2)
             
             sampling_set_2 <-
-              DynamicBayesianNetwork::dbn.sampling(dbn_from_cpts, N_samples, Time)
+              DBNCare::dbn.sampling(dbn_from_cpts, N_samples, Time)
             
             dbn_from_random_data <-
-              DynamicBayesianNetwork::dbn.fit(DBN = dbn_2, data = sampling_set_2)
+              DBNCare::dbn.fit(DBN = dbn_2, data = sampling_set_2)
             
             expect_equal(
               array(dbn_from_random_data$H_2_0_0$prob),
