@@ -135,18 +135,18 @@ for (i in 1:nrow(arcs_matrix)) {
 summary_DBN(diabetes_management_dbn)
 ```
 
-The Network at time 0 is visualized via `plot_g0` function from DBNCare:
+The Network at time 0 is visualized via the `plot` method from DBNCare with `network = "g_0"`:
 
 ```{r}
 # Network at time 0
-plot_g0(diabetes_management_dbn)
+plot(diabetes_management_dbn, network = "g_0")
 ```
 
-The same goes for the transition network through function `plot_g_transition`:
+The same goes for the transition network, the default of `plot`:
 
 ```{r}
 # Transition Network
-plot_g_transition(diabetes_management_dbn)
+plot(diabetes_management_dbn)
 ```
 
 
@@ -596,12 +596,12 @@ learned_diabetes_management_cpts <- DBN_parameters(DBN = learned_diabetes_manage
 
 ```{r}
 # Visualization of the initial network for the learned DBN (via Hill Climbing method)
-plot_g0(learned_diabetes_management_dbn)
+plot(learned_diabetes_management_dbn, network = "g_0")
 ```
 
 ```{r}
 # Visualization of the transition network for the learned DBN (via Hill Climbing method)
-plot_g_transition(learned_diabetes_management_dbn)
+plot(learned_diabetes_management_dbn)
 ```
 
 # Inference for DBNs: Filtering, Smoothing, Prediction and Forecasting

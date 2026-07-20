@@ -35,8 +35,8 @@ print(true_dbn)
 modelstring.dbn(true_dbn)
 
 # Visualise
-plot_g0(true_dbn)
-plot_g_transition(true_dbn)
+plot(true_dbn, network = "g_0")
+plot(true_dbn)
 
 
 # =============================================================================

@@ -141,15 +141,15 @@ The package allows the user to visualize in an interactive setting G_transition 
 ### G_transition
 
 ```{r}
-plot_g_transition(my_dbn)
+plot(my_dbn)
 ```
 
 ### G_0
 
-G_0 can be visualized and a dropdown menu will help the user to navigate the defined network. In fact when a node is selected from the menu the relationships and the node itself will be highlighted.
+G_0 can be visualized by passing `network = "g_0"` to `plot`.
 
 ```{r}
-plot_g0(my_dbn)
+plot(my_dbn, network = "g_0")
 ```
 
 ### Sampling
@@ -281,12 +281,12 @@ Given a Dynamic Bayesian Network, the package can generate a dataset using a sam
 ```
 
 ```{r}
-plot_g_transition(my_dbn)
+plot(my_dbn)
 
 ```
 
 ```{r}
-plot_g0(my_dbn)
+plot(my_dbn, network = "g_0")
 
 ```
 
