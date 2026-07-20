@@ -21,8 +21,13 @@ plan_parent_ref <- function(parent, var_index) {
 
 # plan of a gaussian node: regression coefficients in parents order, indexed
 # like sample_variable_gaussian() does (regs[1] = intercept, regs[i + 1] =
-# coefficient of parents[i])
-plan_gaussian_node <- function(net, variable, var_index) {
+# coefficient of parents[i]).
+#
+# `g0 = TRUE` marks a prior-network node: `time` is the slice it writes to
+# (0 for var_0, 1 for var_1, ...) and each parent lag is stored relative to
+# that slice, so the C++ core reads the parent at block + (time - lag). For a
+# transition node (g0 = FALSE) time = 0 and the lag stays the absolute t-k lag.
+plan_gaussian_node <- function(net, variable, var_index, g0 = FALSE) {
   node <- net[[variable]]
   if (is.null(node$regs)) {
     stop(paste("dbn.sampling.cpp: node", variable,
@@ -34,15 +39,17 @@ plan_gaussian_node <- function(net, variable, var_index) {
     stop(paste("dbn.sampling.cpp: node", variable, "has", length(regs),
                "coefficients for", length(parents), "parents"))
   }
+  node_time <- if (g0) get_variable_time_index(variable) else 0L
   par_var <- integer(length(parents))
   par_lag <- integer(length(parents))
   for (i in seq_along(parents)) {
     ref <- plan_parent_ref(parents[i], var_index)
     par_var[i] <- ref$var
-    par_lag[i] <- ref$lag
+    par_lag[i] <- if (g0) node_time - ref$lag else ref$lag
   }
 
   list(var = var_index[[split_variable_name(variable)$name]],
+       time = as.integer(node_time),
        intercept = regs[1],
        std = as.numeric(node$std),
        par_var = par_var,
@@ -70,7 +77,9 @@ discrete_levels <- function(bn_0, bn_transition, base_names) {
 # dimension, the translation of the level labels to canonical codes. The CPT
 # layout (dim 1 = the node itself, then its parents) matches the row order of
 # data.frame(as.table(prob)) used by sample_variable_discrete().
-plan_discrete_node <- function(net, variable, var_index, levels_list) {
+# `g0` behaves as in plan_gaussian_node(): prior nodes carry the slice they
+# write to (`time`) and store parent lags relative to that slice.
+plan_discrete_node <- function(net, variable, var_index, levels_list, g0 = FALSE) {
   node <- net[[variable]]
   prob <- node$prob
   if (is.null(prob)) {
@@ -90,6 +99,7 @@ plan_discrete_node <- function(net, variable, var_index, levels_list) {
   base <- split_variable_name(variable)$name
   own_map <- match(dn[[1]], levels_list[[base]]) - 1L
 
+  node_time <- if (g0) get_variable_time_index(variable) else 0L
   n_parents <- length(dnn) - 1L
   par_var <- integer(n_parents)
   par_lag <- integer(n_parents)
@@ -98,12 +108,13 @@ plan_discrete_node <- function(net, variable, var_index, levels_list) {
     parent <- dnn[j + 1L]
     ref <- plan_parent_ref(parent, var_index)
     par_var[j] <- ref$var
-    par_lag[j] <- ref$lag
+    par_lag[j] <- if (g0) node_time - ref$lag else ref$lag
     codes <- match(dn[[j + 1L]], levels_list[[split_variable_name(parent)$name]]) - 1L
     codes[is.na(codes)] <- -1L
     par_map[[j]] <- as.integer(codes)
   }
   list(var = var_index[[base]],
+       time = as.integer(node_time),
        dims = as.integer(dim(prob)),
        own_map = as.integer(own_map),
        freq = as.numeric(prob),
@@ -113,7 +124,10 @@ plan_discrete_node <- function(net, variable, var_index, levels_list) {
 }
 
 
-plan_mixed_node = function(net, variable, var_index, levels_list) {
+# `g0` behaves as in plan_gaussian_node(): prior nodes carry the slice they
+# write to (`time`) and store both continuous and discrete parent lags relative
+# to that slice.
+plan_mixed_node = function(net, variable, var_index, levels_list, g0 = FALSE) {
   node <- net[[variable]]
   if (is.null(node$coefficients)) {
     stop(paste("dbn.sampling.cpp: node", variable,
@@ -132,6 +146,8 @@ plan_mixed_node = function(net, variable, var_index, levels_list) {
                "residual sds for", n_combos, "discrete-parent combinations"))
   }
 
+  node_time <- if (g0) get_variable_time_index(variable) else 0L
+
   # continuous part: like plan_gaussian_node, one (var, lag) per continuous
   # parent. The intercept (row 1) is kept separate, mirroring the gaussian plan.
   cont_names <- reg_names[-1]
@@ -140,7 +156,7 @@ plan_mixed_node = function(net, variable, var_index, levels_list) {
   for (i in seq_along(cont_names)) {
     ref <- plan_parent_ref(cont_names[i], var_index)
     cont_par_var[i] <- ref$var
-    cont_par_lag[i] <- ref$lag
+    cont_par_lag[i] <- if (g0) node_time - ref$lag else ref$lag
   }
 
   # coefficients are one vector per discrete-parent combination
@@ -159,7 +175,7 @@ plan_mixed_node = function(net, variable, var_index, levels_list) {
   for (j in seq_along(dlevels)) {
     ref <- plan_parent_ref(disc_names[j], var_index)
     dis_par_var[j] <- ref$var
-    dis_par_lag[j] <- ref$lag
+    dis_par_lag[j] <- if (g0) node_time - ref$lag else ref$lag
     disc_dims[j] <- length(dlevels[[j]])
     codes <- match(dlevels[[j]],
                    levels_list[[split_variable_name(disc_names[j])$name]]) - 1L
@@ -168,6 +184,7 @@ plan_mixed_node = function(net, variable, var_index, levels_list) {
   }
 
   list(var = var_index[[split_variable_name(variable)$name]],
+       time = as.integer(node_time),
        intercept = as.numeric(coef_mat[1, ]),
        std = as.numeric(node$sd),
        cont_par_var = cont_par_var,
@@ -179,7 +196,7 @@ plan_mixed_node = function(net, variable, var_index, levels_list) {
        disc_par_map = par_code)
 }
 
-plan_all_mix = function(net, ordered_nodes, var_index, levels_list) {
+plan_all_mix = function(net, ordered_nodes, var_index, levels_list, g0 = FALSE) {
   plan = list()
   plan[["discrete"]] = list()
   plan[["gaussian"]] = list()
@@ -196,17 +213,17 @@ plan_all_mix = function(net, ordered_nodes, var_index, levels_list) {
     nname = ordered_nodes[i]
     node = net[[nname]]
     if (inherits(node, "bn.fit.dnode")) {
-      plan[["discrete"]][[nname]] = plan_discrete_node(net, nname, var_index, levels_list)
+      plan[["discrete"]][[nname]] = plan_discrete_node(net, nname, var_index, levels_list, g0 = g0)
       type_vec[i] = 0L
       idx_vec[i] = disc_idx
       disc_idx = disc_idx + 1
     } else if (inherits(node, "bn.fit.gnode")) {
-      plan[["gaussian"]][[nname]] = plan_gaussian_node(net, nname, var_index)
+      plan[["gaussian"]][[nname]] = plan_gaussian_node(net, nname, var_index, g0 = g0)
       type_vec[i] = 1L
       idx_vec[i] = gauss_idx
       gauss_idx = gauss_idx + 1
     } else if (inherits(node, "bn.fit.cgnode")) {
-      plan[["mixed"]][[nname]] = plan_mixed_node(net, nname, var_index, levels_list)
+      plan[["mixed"]][[nname]] = plan_mixed_node(net, nname, var_index, levels_list, g0 = g0)
       type_vec[i] = 2L
       idx_vec[i] = mix_idx
       mix_idx = mix_idx + 1
@@ -262,9 +279,11 @@ dbn.sampling <- function(fitted_dbn, n_samples, max_time) {
   nodes_t <- get_nodes_t(remove_prev_time_from_bn_fit(bn_transition))
 
   # output columns follow the order in which the variables first enter the
-  # time-series dictionary in dbn.sampling(), i.e. the t = 0 node ordering
-  base_names <- vapply(nodes_0, function(v) split_variable_name(v)$name,
-                       character(1), USE.NAMES = FALSE)
+  # time-series dictionary in dbn.sampling(), i.e. the t = 0 node ordering.
+  # unique(): with an extended G_0 the same base variable appears once per
+  # initial slice (var_0, var_1, ...) but maps to a single output column.
+  base_names <- unique(vapply(nodes_0, function(v) split_variable_name(v)$name,
+                              character(1), USE.NAMES = FALSE))
   for (v in nodes_t) {
     if (!split_variable_name(v)$name %in% base_names) {
       stop(paste("dbn.sampling.cpp: transition node", v,
@@ -277,14 +296,14 @@ dbn.sampling <- function(fitted_dbn, n_samples, max_time) {
   max_time <- as.integer(max_time)
 
   if (dbn_type == "gaussian") {
-    plan_0 <- lapply(nodes_0, function(v) plan_gaussian_node(bn_0, v, var_index))
+    plan_0 <- lapply(nodes_0, function(v) plan_gaussian_node(bn_0, v, var_index, g0 = TRUE))
     plan_t <- lapply(nodes_t, function(v) plan_gaussian_node(bn_transition, v, var_index))
     values <- dbn_sample_gaussian_cpp(n_samples, max_time, length(base_names),
                                       plan_0, plan_t)
     columns <- lapply(seq_along(base_names), function(i) values[, i])
   } else if (dbn_type == "discrete") {
     levels_list <- discrete_levels(bn_0, bn_transition, base_names)
-    plan_0 <- lapply(nodes_0, function(v) plan_discrete_node(bn_0, v, var_index, levels_list))
+    plan_0 <- lapply(nodes_0, function(v) plan_discrete_node(bn_0, v, var_index, levels_list, g0 = TRUE))
     plan_t <- lapply(nodes_t, function(v) plan_discrete_node(bn_transition, v, var_index, levels_list))
     codes <- dbn_sample_discrete_cpp(n_samples, max_time, length(base_names),
                                      vapply(levels_list[base_names], length, integer(1)),
@@ -305,7 +324,7 @@ dbn.sampling <- function(fitted_dbn, n_samples, max_time) {
     )]
     levels_list <- discrete_levels(bn_0, bn_transition, discrete_nodes)
 
-    parse_0 <- plan_all_mix(bn_0, nodes_0, var_index, levels_list)
+    parse_0 <- plan_all_mix(bn_0, nodes_0, var_index, levels_list, g0 = TRUE)
     parse_t <- plan_all_mix(bn_transition, nodes_t, var_index, levels_list)
 
     plan_0 <- parse_0$plan

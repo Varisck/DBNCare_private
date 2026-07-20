@@ -39,7 +39,9 @@ void check_matrix_size(double n_rows) {
 // --------------------------------------------------------------------------
 
 struct GaussNode {
-  int var;  // column written by this node
+  int var;   // column written by this node
+  int time;  // slice this node writes to (G_0 nodes: 0..g0_span-1; transition
+             // nodes: 0, unused - the transition loop supplies the time)
   double intercept;
   double std;                    // residual standard deviation
   std::vector<int> par_var;      // parent columns
@@ -54,12 +56,13 @@ std::vector<GaussNode> parse_gauss_plan(const List& plan, int n_vars) {
     List spec = plan[k];
     GaussNode node;
     node.var = as<int>(spec["var"]);
+    node.time = as<int>(spec["time"]);
     node.intercept = as<double>(spec["intercept"]);
     node.std = as<double>(spec["std"]);
     node.par_var = as<std::vector<int>>(spec["par_var"]);
     node.par_lag = as<std::vector<int>>(spec["par_lag"]);
     node.par_coef = as<std::vector<double>>(spec["par_coef"]);
-    if (node.var < 0 || node.var >= n_vars ||
+    if (node.var < 0 || node.var >= n_vars || node.time < 0 ||
         node.par_var.size() != node.par_lag.size() ||
         node.par_var.size() != node.par_coef.size())
       stop("dbn.sampling.cpp: malformed gaussian sampling plan");
@@ -100,6 +103,7 @@ double gauss_mean(const GaussNode& node, const NumericMatrix& values,
 // become integer comparisons.
 struct DiscNode {
   int var;                    // column written by this node
+  int time;                   // slice this node writes to (see GaussNode::time)
   std::vector<int> dims;      // dims[0] = own level count
   std::vector<int> own_code;  // CPT dim-1 index -> canonical code
   std::vector<double> freq;   // CPT probabilities, column-major
@@ -118,6 +122,7 @@ std::vector<DiscNode> parse_disc_plan(const List& plan, int n_vars,
     List spec = plan[k];
     DiscNode node;
     node.var = as<int>(spec["var"]);
+    node.time = as<int>(spec["time"]);
     node.dims = as<std::vector<int>>(spec["dims"]);
     node.own_code = as<std::vector<int>>(spec["own_map"]);
     node.freq = as<std::vector<double>>(spec["freq"]);
@@ -125,8 +130,8 @@ std::vector<DiscNode> parse_disc_plan(const List& plan, int n_vars,
     node.par_lag = as<std::vector<int>>(spec["par_lag"]);
     List par_map = spec["par_map"];
 
-    if (node.var < 0 || node.var >= n_vars || node.dims.empty() ||
-        node.dims.size() != node.par_var.size() + 1 ||
+    if (node.var < 0 || node.var >= n_vars || node.time < 0 ||
+        node.dims.empty() || node.dims.size() != node.par_var.size() + 1 ||
         node.par_var.size() != node.par_lag.size() ||
         static_cast<size_t>(par_map.size()) != node.par_var.size())
       stop("dbn.sampling.cpp: malformed discrete sampling plan");
@@ -287,6 +292,15 @@ NumericMatrix dbn_sample_gaussian_cpp(int n_samples, int max_time, int n_vars,
   check_matrix_size(static_cast<double>(n_samples) * block_len);
   NumericMatrix values(n_samples * block_len, n_vars);
 
+  // Number of initial slices covered by the prior network G_0. For a plain
+  // (non-extended) G_0 every prior node sits at slice 0, so g0_span = 1 and the
+  // transition network runs from t = 1. With an extended G_0 (var_0, var_1,
+  // ...) the prior nodes span out over slices 0..g0_span-1  and the transition
+  // takes over from t = g0_span.
+  int g0_span = 1;
+  for (const GaussNode& node : nodes_0)
+    if (node.time + 1 > g0_span) g0_span = node.time + 1;
+
   // per-trajectory noise of the transition nodes, drawn before the time loop
   // exactly like dbn.sampling() does (rnorm(max_time, 0, std) per node)
   std::vector<double> noise(nodes_t.size() * static_cast<size_t>(max_time));
@@ -294,18 +308,21 @@ NumericMatrix dbn_sample_gaussian_cpp(int n_samples, int max_time, int n_vars,
   for (int obs = 0; obs < n_samples; ++obs) {
     const R_xlen_t block = static_cast<R_xlen_t>(obs) * block_len;
 
-    // t = 0: prior network, one rnorm() per node in topological order
+    // prior network: one rnorm() per node in topological order, each written to
+    // its own slice (block + node.time; slice 0 for a plain G_0)
     for (const GaussNode& node : nodes_0) {
       const double noise_0 = R::rnorm(0.0, node.std);
-      values(block, node.var) = gauss_mean(node, values, block, 0) + noise_0;
+      if (node.time <= max_time)
+        values(block + node.time, node.var) =
+            gauss_mean(node, values, block, node.time) + noise_0;
     }
 
     for (size_t k = 0; k < nodes_t.size(); ++k)
       for (int t = 0; t < max_time; ++t)
         noise[k * max_time + t] = R::rnorm(0.0, nodes_t[k].std);
 
-    // t = 1..max_time: transition network in topological order
-    for (int t = 1; t <= max_time; ++t)
+    // t = g0_span..max_time: transition network in topological order
+    for (int t = g0_span; t <= max_time; ++t)
       for (size_t k = 0; k < nodes_t.size(); ++k)
         values(block + t, nodes_t[k].var) =
             gauss_mean(nodes_t[k], values, block, t) +
@@ -330,15 +347,21 @@ IntegerMatrix dbn_sample_discrete_cpp(int n_samples, int max_time, int n_vars,
   check_matrix_size(static_cast<double>(n_samples) * block_len);
   IntegerMatrix codes(n_samples * block_len, n_vars);
 
+  // slices covered by G_0 (1 for a plain G_0; see dbn_sample_gaussian_cpp)
+  int g0_span = 1;
+  for (const DiscNode& node : nodes_0)
+    if (node.time + 1 > g0_span) g0_span = node.time + 1;
+
   std::vector<double> prob_buf;
   std::vector<int> code_buf;
 
   for (int obs = 0; obs < n_samples; ++obs) {
     const R_xlen_t block = static_cast<R_xlen_t>(obs) * block_len;
     for (const DiscNode& node : nodes_0)
-      codes(block, node.var) =
-          sample_disc_value(node, codes, block, 0, prob_buf, code_buf);
-    for (int t = 1; t <= max_time; ++t)
+      if (node.time <= max_time)
+        codes(block + node.time, node.var) = sample_disc_value(
+            node, codes, block, node.time, prob_buf, code_buf);
+    for (int t = g0_span; t <= max_time; ++t)
       for (const DiscNode& node : nodes_t)
         codes(block + t, node.var) =
             sample_disc_value(node, codes, block, t, prob_buf, code_buf);
@@ -347,7 +370,8 @@ IntegerMatrix dbn_sample_discrete_cpp(int n_samples, int max_time, int n_vars,
 }
 
 struct MixNode {
-  int var;                        // column written by this node (continuous)
+  int var;   // column written by this node (continuous)
+  int time;  // slice this node writes to (see GaussNode::time)
   std::vector<double> intercept;  // one per discrete-parent combination
   std::vector<double> std;        // residual sd, one per combination
   std::vector<int> cont_par_var;  // continuous parent columns
@@ -372,6 +396,7 @@ std::vector<MixNode> parse_mixed_plan(const List& plan, int n_vars,
     MixNode node;
 
     node.var = as<int>(spec["var"]);
+    node.time = as<int>(spec["time"]);
     node.intercept = as<std::vector<double>>(spec["intercept"]);
     node.std = as<std::vector<double>>(spec["std"]);
 
@@ -385,7 +410,7 @@ std::vector<MixNode> parse_mixed_plan(const List& plan, int n_vars,
     List par_coef = spec["par_coef"];
     List disc_par_map = spec["disc_par_map"];
 
-    if (node.var < 0 || node.var >= n_vars ||
+    if (node.var < 0 || node.var >= n_vars || node.time < 0 ||
         node.cont_par_var.size() != node.cont_par_lag.size() ||
         node.disc_par_var.size() != node.disc_par_lag.size() ||
         node.disc_par_var.size() != node.disc_dims.size() ||
@@ -514,35 +539,56 @@ NumericMatrix dbn_sample_mixed_cpp(int n_samples, int max_time, List n_vars,
   check_matrix_size(static_cast<double>(n_samples) * block_len);
   NumericMatrix values(n_samples * block_len, n_total);
 
+  // slices covered by G_0 (1 for a plain G_0; see dbn_sample_gaussian_cpp)
+  int g0_span = 1;
+  for (const DiscNode& n : disc_nodes_0)
+    if (n.time + 1 > g0_span) g0_span = n.time + 1;
+  for (const GaussNode& n : gauss_nodes_0)
+    if (n.time + 1 > g0_span) g0_span = n.time + 1;
+  for (const MixNode& n : mix_nodes_0)
+    if (n.time + 1 > g0_span) g0_span = n.time + 1;
+
   std::vector<double> prob_buf;
   std::vector<int> code_buf;
 
-  // sample every node of one time slice in topological order
+  // sample every node of one time slice in topological order. When g0 is true
+  // each node is written to its own slice (node.time) instead of the loop's t,
+  // so an extended G_0 fans its prior nodes over slices 0..g0_span-1.
   auto run_slice = [&](const IntegerVector& type, const IntegerVector& idx,
-                       R_xlen_t block, int t, const std::vector<DiscNode>& dn,
+                       R_xlen_t block, int t, bool g0,
+                       const std::vector<DiscNode>& dn,
                        const std::vector<GaussNode>& gn,
                        const std::vector<MixNode>& mn) {
     for (int k = 0; k < type.size(); ++k) {
       const int i = idx[k];
       switch (type[k]) {
-        case 0:  // discrete
+        case 0: {  // discrete
           if (i < 0 || static_cast<size_t>(i) >= dn.size())
             stop("dbn.sampling.cpp: mixed node ordering index out of range");
-          values(block + t, dn[i].var) =
-              sample_disc_value(dn[i], values, block, t, prob_buf, code_buf);
+          const int tt = g0 ? dn[i].time : t;
+          if (tt <= max_time)
+            values(block + tt, dn[i].var) =
+                sample_disc_value(dn[i], values, block, tt, prob_buf, code_buf);
           break;
-        case 1:  // gaussian
+        }
+        case 1: {  // gaussian
           if (i < 0 || static_cast<size_t>(i) >= gn.size())
             stop("dbn.sampling.cpp: mixed node ordering index out of range");
-          values(block + t, gn[i].var) =
-              gauss_mean(gn[i], values, block, t) + R::rnorm(0.0, gn[i].std);
+          const int tt = g0 ? gn[i].time : t;
+          if (tt <= max_time)
+            values(block + tt, gn[i].var) =
+                gauss_mean(gn[i], values, block, tt) + R::rnorm(0.0, gn[i].std);
           break;
-        case 2:  // mixed / CLG
+        }
+        case 2: {  // mixed / CLG
           if (i < 0 || static_cast<size_t>(i) >= mn.size())
             stop("dbn.sampling.cpp: mixed node ordering index out of range");
-          values(block + t, mn[i].var) =
-              sample_mixed_value(mn[i], values, block, t);
+          const int tt = g0 ? mn[i].time : t;
+          if (tt <= max_time)
+            values(block + tt, mn[i].var) =
+                sample_mixed_value(mn[i], values, block, tt);
           break;
+        }
         default:
           stop("dbn.sampling.cpp: unknown node type in mixed ordering");
       }
@@ -551,10 +597,10 @@ NumericMatrix dbn_sample_mixed_cpp(int n_samples, int max_time, List n_vars,
 
   for (int obs = 0; obs < n_samples; ++obs) {
     const R_xlen_t block = static_cast<R_xlen_t>(obs) * block_len;
-    run_slice(order_type_0, order_idx_0, block, 0, disc_nodes_0, gauss_nodes_0,
-              mix_nodes_0);
-    for (int t = 1; t <= max_time; ++t)
-      run_slice(order_type_t, order_idx_t, block, t, disc_nodes_t,
+    run_slice(order_type_0, order_idx_0, block, 0, true, disc_nodes_0,
+              gauss_nodes_0, mix_nodes_0);
+    for (int t = g0_span; t <= max_time; ++t)
+      run_slice(order_type_t, order_idx_t, block, t, false, disc_nodes_t,
                 gauss_nodes_t, mix_nodes_t);
   }
   return values;
