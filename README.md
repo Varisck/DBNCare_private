@@ -48,6 +48,7 @@ The table below highlights the main features currently implemented in DBNCare. F
 | Forecasting          | ✔️      | ✔️         | ✔️        |
 | Sampling             | ✔️      | ✔️         | ✔️        |
 | Parametrized Markov order | ✔️ | ✔️         | ✔️        |
+| Visualization | ✔️ | ✔️         | ✔️        |
 
 ## License
 <a name="license"></a>
@@ -59,5 +60,5 @@ This software is distributed under the terms of both the Apache License (Version
 If you have any questions or feedback or need assistance with DBNCare, please feel free to reach out to us:
 
 - 📧 Alberto Varisco: [alberto.varisco1@gmail.com](mailto:francesco.canonaco@minutia.ai)
-- 📧 Francesco Canonaco: [francesco.canonaco@minutia.ai](mailto:francesco.canonaco@minutia.ai)
 - 📧 Federico Pirola: [federico.pirola@campus.unimib.it](mailto:federico.pirola@campus.unimib.it)
+- 📧 Francesco Canonaco: [francesco.canonaco@minutia.ai](mailto:francesco.canonaco@minutia.ai)
